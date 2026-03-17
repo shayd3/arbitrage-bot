@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arbitrage-frontend
+  namespace: arbitrage-bot
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: arbitrage-frontend
+  template:
+    metadata:
+      labels:
+        app: arbitrage-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: arbitrage-bot-frontend:latest
+          ports:
+            - containerPort: 80
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: arbitrage-frontend
+  namespace: arbitrage-bot
+spec:
+  selector:
+    app: arbitrage-frontend
+  ports:
+    - port: 80
+      targetPort: 80

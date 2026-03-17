@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arbitrage-backend
+  namespace: arbitrage-bot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: arbitrage-backend
+  template:
+    metadata:
+      labels:
+        app: arbitrage-backend
+    spec:
+      containers:
+        - name: backend
+          image: arbitrage-bot-backend:latest
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: arbitrage-bot-config
+            - secretRef:
+                name: arbitrage-bot-secrets
+          volumeMounts:
+            - name: sqlite-data
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: sqlite-data
+          persistentVolumeClaim:
+            claimName: sqlite-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: arbitrage-backend
+  namespace: arbitrage-bot
+spec:
+  selector:
+    app: arbitrage-backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sqlite-pvc
+  namespace: arbitrage-bot
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
