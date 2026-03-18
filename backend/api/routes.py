@@ -52,47 +52,6 @@ async def get_market(ticker: str):
         raise HTTPException(status_code=404, detail="Market not found")
     return market.model_dump(mode="json")
 
-@router.get("/debug/kalshi-series")
-async def debug_kalshi_series():
-    """
-    Discover what Kalshi series/event tickers exist for NBA game winners.
-    Tries several candidate series tickers and returns what comes back.
-    """
-    results = {}
-    candidates = [
-        "KXNBAWINNER",
-        "KXNBA",
-        "NBAWINNER",
-        "KXNBAGAME",
-        "KXNBAWIN",
-    ]
-    for series in candidates:
-        try:
-            data = await kalshi_client._request(
-                "GET", "/markets",
-                params={"status": "open", "limit": 10, "series_ticker": series}
-            )
-            markets = data.get("markets", [])
-            results[series] = [
-                {"ticker": m["ticker"], "title": m.get("title", "")[:80]}
-                for m in markets
-            ]
-        except Exception as e:
-            results[series] = {"error": str(e)}
-
-    # Also try fetching the series list directly
-    try:
-        series_data = await kalshi_client._request("GET", "/series", params={"limit": 50})
-        nba_series = [
-            s for s in series_data.get("series", [])
-            if "NBA" in s.get("ticker", "").upper() or "NBA" in s.get("title", "").upper()
-        ]
-        results["_available_nba_series"] = nba_series
-    except Exception as e:
-        results["_available_nba_series"] = {"error": str(e)}
-
-    return results
-
 @router.get("/balance")
 async def get_balance():
     try:
