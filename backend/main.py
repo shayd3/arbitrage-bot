@@ -19,6 +19,13 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting arbitrage bot in {settings.bot_mode.value} mode")
     logger.info(f"Kalshi environment: {'DEMO' if settings.kalshi_use_demo else 'PRODUCTION'}")
     await get_db()  # Initialize DB
+    from backend.config import BotMode
+    if settings.bot_mode == BotMode.LIVE:
+        from backend.scanner.engine import sync_live_balance
+        await sync_live_balance()
+    else:
+        from backend.execution.simulator import simulator
+        await simulator.ensure_balance()
     from backend.scanner.engine import scanner
     await scanner.start()
     yield

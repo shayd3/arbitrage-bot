@@ -79,10 +79,10 @@ TEAM_ALIASES: dict[str, str] = {
 }
 
 SPORT_TICKER_PREFIX: dict[Sport, list[str]] = {
-    Sport.NBA: ["KXNBA", "NBA"],
-    Sport.NFL: ["KXNFL", "NFL"],
-    Sport.MLB: ["KXMLB", "MLB"],
-    Sport.NHL: ["KXNHL", "NHL"],
+    Sport.NBA: ["KXNBAGAME", "KXNBA", "NBA"],
+    Sport.NFL: ["KXNFLGAME", "KXNFL", "NFL"],
+    Sport.MLB: ["KXMLBGAME", "KXMLB", "MLB"],
+    Sport.NHL: ["KXNHLGAME", "KXNHL", "NHL"],
 }
 
 def normalize_team_name(name: str) -> str:
@@ -103,39 +103,42 @@ def _ticker_contains_team(ticker: str, abbrev: str) -> bool:
 def match_game_to_markets(game: Game, markets: list[KalshiMarket]) -> list[KalshiMarket]:
     """
     Find Kalshi markets that correspond to a given ESPN game.
-    Returns markets sorted by relevance (best match first).
+
+    Handles the KXNBAGAME format where both teams are concatenated in the ticker:
+      KXNBAGAME-26MAR17OKCORL-OKC  (away=OKC, home=ORL, outcome=OKC wins)
+      KXNBAGAME-26MAR17OKCORL-ORL  (away=OKC, home=ORL, outcome=ORL wins)
     """
     home_abbrev = team_to_kalshi_abbrev(game.home_team.name)
     away_abbrev = team_to_kalshi_abbrev(game.away_team.name)
 
-    # Also try ESPN abbreviations directly
-    home_abbrevs = {a for a in [home_abbrev, game.home_team.abbreviation] if a}
-    away_abbrevs = {a for a in [away_abbrev, game.away_team.abbreviation] if a}
+    home_abbrevs = {a.upper() for a in [home_abbrev, game.home_team.abbreviation] if a}
+    away_abbrevs = {a.upper() for a in [away_abbrev, game.away_team.abbreviation] if a}
 
     sport_prefixes = SPORT_TICKER_PREFIX.get(game.sport, [])
 
     results = []
     for market in markets:
-        if market.status != "open":
+        if market.status not in OPEN_STATUSES:
             continue
 
         ticker = market.ticker.upper()
 
-        # Must match sport prefix
         if not any(ticker.startswith(pfx) for pfx in sport_prefixes):
-            # Also check if it just contains the sport
             sport_str = game.sport.value.upper()
             if sport_str not in ticker:
                 continue
 
-        # Check for team match
-        home_match = any(_ticker_contains_team(ticker, a) for a in home_abbrevs)
-        away_match = any(_ticker_contains_team(ticker, a) for a in away_abbrevs)
+        # Check for concatenated team pair (KXNBAGAME format): OKCORL or OKCORLANDO, etc.
+        # Both teams must appear in the ticker (as a pair) to confirm it's this specific game.
+        home_in_ticker = any(a in ticker for a in home_abbrevs)
+        away_in_ticker = any(a in ticker for a in away_abbrevs)
 
-        if home_match or away_match:
+        if home_in_ticker and away_in_ticker:
             results.append(market)
 
     return results
+
+OPEN_STATUSES = {"open", "active"}
 
 class GameMarketMatch:
     """Represents a matched game + market pair."""

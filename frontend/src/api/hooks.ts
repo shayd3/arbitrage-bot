@@ -22,7 +22,7 @@ export function useGames(sport?: string) {
 export function useMarkets() {
   return useQuery({
     queryKey: ['markets'],
-    queryFn: () => fetchJson<{ markets: KalshiMarket[] }>(`${API_BASE}/markets`),
+    queryFn: () => fetchJson<{ markets: KalshiMarket[] }>(`${API_BASE}/markets?limit=100&series_ticker=KXNBAGAME`),
     refetchInterval: 15000,
   })
 }

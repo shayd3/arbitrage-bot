@@ -14,6 +14,39 @@ from backend.models import KalshiMarket
 class KalshiAuthError(Exception):
     pass
 
+def _dollars_to_cents(val) -> int | None:
+    """Convert Kalshi dollar string (e.g. '0.8100') to cents int (81)."""
+    if val is None:
+        return None
+    try:
+        return round(float(val) * 100)
+    except (ValueError, TypeError):
+        return None
+
+def _fp_to_int(val) -> int | None:
+    """Convert Kalshi fixed-point string (e.g. '73774.00') to int."""
+    if val is None:
+        return None
+    try:
+        return int(float(val))
+    except (ValueError, TypeError):
+        return None
+
+def _parse_market(m: dict) -> "KalshiMarket":
+    from backend.models import KalshiMarket
+    return KalshiMarket(
+        ticker=m["ticker"],
+        title=m.get("title", ""),
+        status=m.get("status", ""),
+        yes_bid=_dollars_to_cents(m.get("yes_bid_dollars") or m.get("yes_bid")),
+        yes_ask=_dollars_to_cents(m.get("yes_ask_dollars") or m.get("yes_ask")),
+        no_bid=_dollars_to_cents(m.get("no_bid_dollars") or m.get("no_bid")),
+        no_ask=_dollars_to_cents(m.get("no_ask_dollars") or m.get("no_ask")),
+        volume=_fp_to_int(m.get("volume_fp") or m.get("volume")),
+        open_interest=_fp_to_int(m.get("open_interest_fp") or m.get("open_interest")),
+        close_time=m.get("close_time"),
+    )
+
 class KalshiClient:
     def __init__(self):
         self.base_url = settings.kalshi_base_url
@@ -61,13 +94,16 @@ class KalshiClient:
 
     async def _request(self, method: str, path: str, **kwargs) -> dict:
         client = await self._get_client()
-        body = ""
-        if kwargs.get("json"):
-            body = json.dumps(kwargs["json"])
-        auth_headers = self._sign_request(method, path, body)
+        # Kalshi signs only timestamp+method+path — body is NOT included in signature
+        body_str = ""
+        if "json" in kwargs:
+            body_str = json.dumps(kwargs.pop("json"), separators=(",", ":"))
+        auth_headers = self._sign_request(method, path, body="")
+        headers = {**auth_headers, "Content-Type": "application/json"}
         response = await client.request(
             method, path,
-            headers=auth_headers,
+            headers=headers,
+            content=body_str.encode("utf-8") if body_str else None,
             **kwargs
         )
         response.raise_for_status()
@@ -78,44 +114,21 @@ class KalshiClient:
         data = await self._request("GET", "/portfolio/balance")
         return data.get("balance", {})
 
-    async def get_markets(self, status: str = "open", limit: int = 100, cursor: str = "") -> list[KalshiMarket]:
+    async def get_markets(self, status: str = "open", limit: int = 100, cursor: str = "", series_ticker: str = "") -> list[KalshiMarket]:
         """Fetch open markets, optionally filtered."""
         params = {"status": status, "limit": limit}
         if cursor:
             params["cursor"] = cursor
+        if series_ticker:
+            params["series_ticker"] = series_ticker
         data = await self._request("GET", "/markets", params=params)
-        markets = []
-        for m in data.get("markets", []):
-            markets.append(KalshiMarket(
-                ticker=m["ticker"],
-                title=m.get("title", ""),
-                status=m.get("status", ""),
-                yes_bid=m.get("yes_bid"),
-                yes_ask=m.get("yes_ask"),
-                no_bid=m.get("no_bid"),
-                no_ask=m.get("no_ask"),
-                volume=m.get("volume"),
-                open_interest=m.get("open_interest"),
-                close_time=m.get("close_time"),
-            ))
-        return markets
+        return [_parse_market(m) for m in data.get("markets", [])]
 
     async def get_market(self, ticker: str) -> KalshiMarket | None:
         try:
             data = await self._request("GET", f"/markets/{ticker}")
             m = data.get("market", {})
-            return KalshiMarket(
-                ticker=m["ticker"],
-                title=m.get("title", ""),
-                status=m.get("status", ""),
-                yes_bid=m.get("yes_bid"),
-                yes_ask=m.get("yes_ask"),
-                no_bid=m.get("no_bid"),
-                no_ask=m.get("no_ask"),
-                volume=m.get("volume"),
-                open_interest=m.get("open_interest"),
-                close_time=m.get("close_time"),
-            )
+            return _parse_market(m)
         except httpx.HTTPStatusError:
             return None
 
@@ -138,7 +151,7 @@ class KalshiClient:
             "count": count,
             "type": order_type,
             "yes_price": price if side == "yes" else 100 - price,
-            "time_in_force": "ioc",  # immediate-or-cancel
+            "time_in_force": "fill_or_kill",
         }
         data = await self._request("POST", "/portfolio/orders", json=body)
         return data.get("order", {})

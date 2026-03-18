@@ -1,6 +1,14 @@
 from dataclasses import dataclass
 from backend.models import Sport
 
+# Kalshi series ticker for game winner markets per sport
+SPORT_SERIES_TICKER: dict[Sport, str] = {
+    Sport.NBA: "KXNBAGAME",
+    Sport.NFL: "KXNFLGAME",
+    Sport.NHL: "KXNHLGAME",
+    Sport.MLB: "KXMLBGAME",
+}
+
 @dataclass
 class SportConfig:
     sport: Sport
