@@ -7,7 +7,7 @@ interface Props {
 
 export default function PnLChart({ history }: Props) {
   const data = [...history].reverse().map((b) => ({
-    time: new Date(b.timestamp).toLocaleTimeString(),
+    time: b.timestamp ? new Date(b.timestamp).toLocaleTimeString() : '',
     total: b.total.toFixed(2),
   }))
 
