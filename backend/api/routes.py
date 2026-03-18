@@ -1,10 +1,22 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
+from pydantic import BaseModel
 from backend.clients.espn import fetch_all_games, fetch_games
 from backend.clients.kalshi import kalshi_client
-from backend.db import get_trades, get_latest_balance, get_balance_history
+from backend.db import get_trades, get_latest_balance, get_balance_history, get_config_override, set_config_override
 from backend.models import Sport
 from backend.config import settings
+
+class SportStrategyBody(BaseModel):
+    min_lead: Optional[int] = None
+    final_period_window: Optional[float] = None
+    min_yes_price: Optional[int] = None
+    poll_interval: Optional[float] = None
+
+class GlobalStrategyBody(BaseModel):
+    max_position_pct: Optional[int] = None
+    max_open_positions: Optional[int] = None
+    max_daily_loss: Optional[float] = None
 
 router = APIRouter(prefix="/api")
 
@@ -91,12 +103,72 @@ async def get_scanner_log(limit: int = 50):
 
 @router.post("/config/{key}")
 async def set_config(key: str, value: str):
-    from backend.db import set_config_override
     await set_config_override(key, value)
     return {"key": key, "value": value}
 
 @router.get("/config/{key}")
 async def get_config(key: str):
-    from backend.db import get_config_override
     value = await get_config_override(key)
     return {"key": key, "value": value}
+
+@router.get("/strategy")
+async def get_strategy():
+    from backend.scanner.sports import SPORT_CONFIGS, get_sport_config
+    import json
+
+    global_override = await get_config_override("global_risk")
+    global_config = {"max_position_pct": 20, "max_open_positions": 5, "max_daily_loss": 100.0}
+    if global_override:
+        try:
+            global_config.update(json.loads(global_override))
+        except (json.JSONDecodeError, KeyError):
+            pass
+
+    sports = []
+    for sport in Sport:
+        if sport in SPORT_CONFIGS:
+            config = await get_sport_config(sport)
+            sports.append({
+                "sport": sport.value,
+                "final_period": config.final_period,
+                "final_period_window": config.final_period_window,
+                "min_lead": config.min_lead,
+                "min_yes_price": config.min_yes_price,
+                "poll_interval": config.poll_interval,
+            })
+
+    return {"global": global_config, "mode": settings.bot_mode.value, "sports": sports}
+
+@router.post("/strategy/global")
+async def set_global_strategy(body: GlobalStrategyBody):
+    import json
+    existing_json = await get_config_override("global_risk")
+    current: dict = {}
+    if existing_json:
+        try:
+            current = json.loads(existing_json)
+        except json.JSONDecodeError:
+            pass
+    current.update(body.model_dump(exclude_none=True))
+    await set_config_override("global_risk", json.dumps(current))
+    return {"config": current}
+
+@router.post("/strategy/sport/{sport}")
+async def set_sport_strategy(sport: str, body: SportStrategyBody):
+    from backend.scanner.sports import get_sport_config
+    import json
+    try:
+        sport_enum = Sport(sport.lower())
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Unknown sport: {sport}")
+    config = await get_sport_config(sport_enum)
+    merged = {
+        "final_period": config.final_period,
+        "final_period_window": config.final_period_window,
+        "min_lead": config.min_lead,
+        "min_yes_price": config.min_yes_price,
+        "poll_interval": config.poll_interval,
+    }
+    merged.update(body.model_dump(exclude_none=True))
+    await set_config_override(f"sport_config_{sport_enum.value}", json.dumps(merged))
+    return {"sport": sport, "config": merged}

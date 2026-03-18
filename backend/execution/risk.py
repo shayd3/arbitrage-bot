@@ -13,31 +13,56 @@ MAX_DAILY_LOSS_DOLLARS = 100.0
 class RiskError(Exception):
     pass
 
+async def _get_risk_params() -> dict:
+    """Return risk params, applying any DB overrides from the strategy page."""
+    from backend.db import get_config_override
+    import json
+    params = {
+        "max_position_pct": MAX_POSITION_PCT,
+        "max_open_positions": MAX_OPEN_POSITIONS,
+        "max_daily_loss": MAX_DAILY_LOSS_DOLLARS,
+    }
+    override_json = await get_config_override("global_risk")
+    if override_json:
+        try:
+            overrides = json.loads(override_json)
+            if "max_position_pct" in overrides:
+                params["max_position_pct"] = overrides["max_position_pct"] / 100.0
+            if "max_open_positions" in overrides:
+                params["max_open_positions"] = int(overrides["max_open_positions"])
+            if "max_daily_loss" in overrides:
+                params["max_daily_loss"] = float(overrides["max_daily_loss"])
+        except (json.JSONDecodeError, KeyError, ValueError):
+            pass
+    return params
+
 async def get_max_position_dollars(is_simulated: bool) -> float:
-    """Return max dollars allowed for a single trade (20% of available balance)."""
+    """Return max dollars allowed for a single trade."""
+    params = await _get_risk_params()
     balance = await get_latest_balance(is_simulated=is_simulated)
     available = balance["available"] if balance else 0.0
-    return available * MAX_POSITION_PCT
+    return available * params["max_position_pct"]
 
 async def pre_trade_checks(
     ticker: str, side: str, contracts: int, price: int,
     is_simulated: bool, game_id: str | None = None,
 ):
     """Raise RiskError if trade should not proceed."""
+    params = await _get_risk_params()
 
     if contracts <= 0:
         raise RiskError("Contracts must be positive")
     if not (1 <= price <= 99):
         raise RiskError(f"Invalid price {price}¢ (must be 1-99)")
 
-    # Balance + 20% position size check
+    # Balance + position size check
     balance = await get_latest_balance(is_simulated=is_simulated)
     available = balance["available"] if balance else 0.0
     cost = (contracts * price) / 100  # dollars
-    max_cost = available * MAX_POSITION_PCT
+    max_cost = available * params["max_position_pct"]
     if cost > max_cost:
         raise RiskError(
-            f"Position ${cost:.2f} exceeds 20% of balance (${max_cost:.2f})"
+            f"Position ${cost:.2f} exceeds {params['max_position_pct']*100:.0f}% of balance (${max_cost:.2f})"
         )
     if available < cost:
         raise RiskError(f"Insufficient balance: need ${cost:.2f}, have ${available:.2f}")
@@ -47,13 +72,13 @@ async def pre_trade_checks(
     today = date.today().isoformat()
     today_trades = [t for t in trades if t["created_at"].startswith(today)]
     daily_loss = sum(t["pnl"] for t in today_trades if t["pnl"] is not None and t["pnl"] < 0)
-    if abs(daily_loss) >= MAX_DAILY_LOSS_DOLLARS:
+    if abs(daily_loss) >= params["max_daily_loss"]:
         raise RiskError(f"Daily loss limit reached: ${abs(daily_loss):.2f}")
 
-    # Max 5 concurrent open positions
+    # Max concurrent open positions
     open_positions = [t for t in trades if t["status"] in ("pending", "filled")]
-    if len(open_positions) >= MAX_OPEN_POSITIONS:
-        raise RiskError(f"Max {MAX_OPEN_POSITIONS} concurrent positions reached")
+    if len(open_positions) >= params["max_open_positions"]:
+        raise RiskError(f"Max {params['max_open_positions']} concurrent positions reached")
 
     # No duplicate ticker
     open_tickers = {t["ticker"] for t in open_positions}
