@@ -100,6 +100,10 @@ def _ticker_contains_team(ticker: str, abbrev: str) -> bool:
     # Match patterns like -LAL-, _LAL_, LALNBA, etc.
     return bool(re.search(r'[-_]?' + re.escape(abbrev_upper) + r'[-_]?', ticker_upper))
 
+# Max seconds between game start_time and market close_time to be considered
+# the same game. Game winner markets close at tipoff, so this should be tight.
+_GAME_TIME_TOLERANCE_SECS = 8 * 3600  # 8 hours
+
 def match_game_to_markets(game: Game, markets: list[KalshiMarket]) -> list[KalshiMarket]:
     """
     Find Kalshi markets that correspond to a given ESPN game.
@@ -133,8 +137,26 @@ def match_game_to_markets(game: Game, markets: list[KalshiMarket]) -> list[Kalsh
         home_in_ticker = any(a in ticker for a in home_abbrevs)
         away_in_ticker = any(a in ticker for a in away_abbrevs)
 
-        if home_in_ticker and away_in_ticker:
-            results.append(market)
+        if not (home_in_ticker and away_in_ticker):
+            continue
+
+        # Guard against matching a future game's market to a currently in-progress game.
+        # Game winner markets close at tipoff, so close_time should be within a few hours
+        # of the game's start_time. If they're far apart, it's a different day's game.
+        if game.start_time and market.close_time:
+            from datetime import timezone
+            game_start = game.start_time
+            market_close = market.close_time
+            # Normalise to UTC-aware for comparison
+            if game_start.tzinfo is None:
+                game_start = game_start.replace(tzinfo=timezone.utc)
+            if market_close.tzinfo is None:
+                market_close = market_close.replace(tzinfo=timezone.utc)
+            diff = abs((market_close - game_start).total_seconds())
+            if diff > _GAME_TIME_TOLERANCE_SECS:
+                continue
+
+        results.append(market)
 
     return results
 

@@ -1,5 +1,6 @@
 """Tests for backend/scanner/matcher.py — game-to-market matching."""
 import pytest
+from datetime import datetime, timezone, timedelta
 from backend.models import Game, GameStatus, KalshiMarket, Sport, Team
 from backend.scanner.matcher import (
     normalize_team_name,
@@ -7,6 +8,7 @@ from backend.scanner.matcher import (
     _ticker_contains_team,
     match_game_to_markets,
     GameMarketMatch,
+    _GAME_TIME_TOLERANCE_SECS,
 )
 
 
@@ -14,22 +16,28 @@ from backend.scanner.matcher import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+_BASE_TIME = datetime(2026, 3, 19, 22, 0, 0, tzinfo=timezone.utc)  # 10pm UTC Mar 19
+
+
 def make_game(
     home_name="Los Angeles Lakers", home_abbrev="LAL",
     away_name="Boston Celtics", away_abbrev="BOS",
     sport=Sport.NBA,
+    start_time: datetime | None = None,
 ) -> Game:
     return Game(
         id="g1", sport=sport,
         home_team=Team(id="h", name=home_name, abbreviation=home_abbrev, score=0),
         away_team=Team(id="a", name=away_name, abbreviation=away_abbrev, score=0),
         status=GameStatus.IN_PROGRESS,
+        start_time=start_time,
     )
 
 
-def make_market(ticker="KXNBA-LAL-BOS-20260317", status="open") -> KalshiMarket:
+def make_market(ticker="KXNBA-LAL-BOS-20260317", status="open",
+                close_time: datetime | None = None) -> KalshiMarket:
     return KalshiMarket(ticker=ticker, title="Lakers vs Celtics", status=status,
-                        yes_ask=80, no_ask=22)
+                        yes_ask=80, no_ask=22, close_time=close_time)
 
 
 # ---------------------------------------------------------------------------
@@ -179,6 +187,56 @@ class TestMatchGameToMarkets:
         markets = [make_market("KXNBAGAME-26MAR17LALBOS-LAL", status="active")]
         result = match_game_to_markets(game, markets)
         assert len(result) == 1
+
+    # --- date-guard tests ---
+
+    def test_same_day_market_matches(self):
+        """Market close_time within tolerance of game start_time → should match."""
+        game = make_game(start_time=_BASE_TIME)
+        market = make_market(close_time=_BASE_TIME + timedelta(hours=1))
+        result = match_game_to_markets(game, [market])
+        assert len(result) == 1
+
+    def test_future_game_market_excluded(self):
+        """Market for a future game (close_time >> start_time) must not match an in-progress game.
+        This is the bug that caused a pre-game order: PHI@SAC in progress on Mar 17 was
+        matched to the Mar 19 PHI@SAC market."""
+        game = make_game(start_time=_BASE_TIME)
+        # Market closes 2 days later — it's tomorrow's game
+        far_future = _BASE_TIME + timedelta(days=2)
+        market = make_market(close_time=far_future)
+        result = match_game_to_markets(game, [market])
+        assert result == []
+
+    def test_date_guard_skipped_when_no_start_time(self):
+        """If the game has no start_time, the date guard is skipped (safe fallback)."""
+        game = make_game(start_time=None)
+        market = make_market(close_time=_BASE_TIME + timedelta(days=5))
+        result = match_game_to_markets(game, [market])
+        assert len(result) == 1
+
+    def test_date_guard_skipped_when_no_close_time(self):
+        """If the market has no close_time, the date guard is skipped (safe fallback)."""
+        game = make_game(start_time=_BASE_TIME)
+        market = make_market(close_time=None)
+        result = match_game_to_markets(game, [market])
+        assert len(result) == 1
+
+    def test_tolerance_boundary_included(self):
+        """A market exactly at the tolerance boundary should still match."""
+        game = make_game(start_time=_BASE_TIME)
+        boundary = _BASE_TIME + timedelta(seconds=_GAME_TIME_TOLERANCE_SECS)
+        market = make_market(close_time=boundary)
+        result = match_game_to_markets(game, [market])
+        assert len(result) == 1
+
+    def test_just_over_tolerance_excluded(self):
+        """A market one second past the tolerance should be excluded."""
+        game = make_game(start_time=_BASE_TIME)
+        over_boundary = _BASE_TIME + timedelta(seconds=_GAME_TIME_TOLERANCE_SECS + 1)
+        market = make_market(close_time=over_boundary)
+        result = match_game_to_markets(game, [market])
+        assert result == []
 
 
 # ---------------------------------------------------------------------------
