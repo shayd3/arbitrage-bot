@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useGames, useMarkets, useTrades, usePositions } from '../api/hooks'
 import GameCard from '../components/GameCard'
 import type { Game, KalshiMarket, Trade } from '../types'
-import { fetchStrategy, updateGlobal, updateSport, formatWindow, modeColor, type SportConfig, type GlobalConfig } from '../api/strategy'
+import { fetchStrategy, updateGlobal, updateSport, formatWindow, type SportConfig, type GlobalConfig } from '../api/strategy'
 import { useGlobalConfigEditor, useSportConfigEditor } from '../hooks/useStrategyEditors'
 import { toKalshiAbbr } from '../utils/teams'
 
@@ -35,9 +35,9 @@ function Field({ label, unit, unitBefore, children }: {
 
 // ─── Global config bar ────────────────────────────────────────────────────────
 
-function GlobalConfigBar({ g, mode, onSave }: {
+function GlobalConfigBar({ g, demo, onSave }: {
   g: GlobalConfig
-  mode: string
+  demo: boolean
   onSave: (c: Partial<GlobalConfig>) => Promise<void>
 }) {
   const { editing, setEditing, pct, setPct, positions, setPositions, loss, setLoss, saving, setSaving, buildConfig } =
@@ -60,8 +60,8 @@ function GlobalConfigBar({ g, mode, onSave }: {
         <Chip label="Max positions" value={String(g.max_open_positions)} />
         <Chip label="Daily loss limit" value={`$${g.max_daily_loss}`} />
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">Mode</span>
-          <span className={`text-sm font-bold uppercase ${modeColor(mode)}`}>{mode}</span>
+          <span className="text-xs text-gray-500">Env</span>
+          <span className={`text-sm font-bold uppercase ${demo ? 'text-yellow-400' : 'text-green-400'}`}>{demo ? 'demo' : 'live'}</span>
         </div>
 
         <div className="ml-auto">
@@ -204,8 +204,8 @@ export default function LiveGames() {
 
   const { data: gamesData, isLoading: gamesLoading } = useGames(activeTab)
   const { data: marketsData } = useMarkets(SPORT_SERIES_TICKERS[activeTab])
-  const { data: tradesData } = useTrades(strategy != null ? strategy.mode === 'simulation' : undefined)
-  const { data: positionsData } = usePositions(strategy != null ? strategy.mode === 'simulation' : undefined)
+  const { data: tradesData } = useTrades()
+  const { data: positionsData } = usePositions()
 
   const positionsByTicker = new Map(
     (positionsData?.positions ?? []).map(p => [p.ticker, p])
@@ -242,7 +242,7 @@ export default function LiveGames() {
       {strategy && !strategyLoading && (
         <GlobalConfigBar
           g={strategy.global}
-          mode={strategy.mode}
+          demo={strategy.demo}
           onSave={(c) => globalMutation.mutateAsync(c)}
         />
       )}

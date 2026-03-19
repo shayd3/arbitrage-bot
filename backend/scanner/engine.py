@@ -7,7 +7,7 @@ from backend.models import Game, GameStatus, Sport, Balance
 from backend.scanner.matcher import match_game_to_markets
 from backend.scanner.sports import get_sport_config, SPORT_SERIES_TICKER
 from backend.db import log_scanner, insert_balance
-from backend.config import settings, BotMode
+from backend.config import settings
 from backend.api.websocket import manager
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,6 @@ async def sync_live_balance():
             available=available,
             portfolio_value=0.0,
             total=available,
-            is_simulated=False,
         ))
         logger.info(f"Synced live balance: ${available:.2f}")
     except Exception as e:
@@ -64,9 +63,8 @@ class ScannerEngine:
             await asyncio.sleep(settings.espn_poll_interval)
 
     async def _scan(self):
-        # Keep live balance in sync so risk checks have current data
-        if settings.bot_mode == BotMode.LIVE:
-            await sync_live_balance()
+        # Keep balance in sync so risk checks have current data
+        await sync_live_balance()
 
         # Fetch live games
         games = await fetch_all_games()

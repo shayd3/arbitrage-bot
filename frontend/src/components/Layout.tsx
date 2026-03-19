@@ -4,7 +4,6 @@ const navItems = [
   { to: '/', label: 'Dashboard' },
   { to: '/games', label: 'Live Games' },
   { to: '/trades', label: 'Trade History' },
-  { to: '/simulation', label: 'Simulation' },
   { to: '/settings', label: 'Settings' },
 ]
 

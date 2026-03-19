@@ -31,25 +31,19 @@ export function useMarkets(seriesTicker?: string) {
   })
 }
 
-export function useTrades(simulated?: boolean) {
+export function useTrades() {
   return useQuery({
-    queryKey: ['trades', simulated],
-    queryFn: () => {
-      const url = simulated !== undefined
-        ? `${API_BASE}/trades?simulated=${simulated}`
-        : `${API_BASE}/trades`
-      return fetchJson<{ trades: Trade[] }>(url)
-    },
+    queryKey: ['trades'],
+    queryFn: () => fetchJson<{ trades: Trade[] }>(`${API_BASE}/trades`),
     refetchInterval: 5000,
   })
 }
 
-export function usePositions(simulated?: boolean) {
+export function usePositions() {
   return useQuery({
-    queryKey: ['positions', simulated],
+    queryKey: ['positions'],
     queryFn: () => fetchJson<{ positions: KalshiPosition[] }>(`${API_BASE}/positions`),
     refetchInterval: 15000,
-    enabled: simulated !== true,
   })
 }
 

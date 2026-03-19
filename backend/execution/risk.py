@@ -1,7 +1,6 @@
 import logging
 from datetime import datetime, date
 from backend.db import get_trades, get_latest_balance
-from backend.config import settings, BotMode
 
 logger = logging.getLogger(__name__)
 
@@ -36,16 +35,16 @@ async def _get_risk_params() -> dict:
             pass
     return params
 
-async def get_max_position_dollars(is_simulated: bool) -> float:
+async def get_max_position_dollars() -> float:
     """Return max dollars allowed for a single trade."""
     params = await _get_risk_params()
-    balance = await get_latest_balance(is_simulated=is_simulated)
+    balance = await get_latest_balance()
     available = balance["available"] if balance else 0.0
     return available * params["max_position_pct"]
 
 async def pre_trade_checks(
     ticker: str, side: str, contracts: int, price: int,
-    is_simulated: bool, game_id: str | None = None,
+    game_id: str | None = None,
 ):
     """Raise RiskError if trade should not proceed."""
     params = await _get_risk_params()
@@ -56,7 +55,7 @@ async def pre_trade_checks(
         raise RiskError(f"Invalid price {price}¢ (must be 1-99)")
 
     # Balance + position size check
-    balance = await get_latest_balance(is_simulated=is_simulated)
+    balance = await get_latest_balance()
     available = balance["available"] if balance else 0.0
     cost = (contracts * price) / 100  # dollars
     max_cost = available * params["max_position_pct"]
@@ -68,7 +67,7 @@ async def pre_trade_checks(
         raise RiskError(f"Insufficient balance: need ${cost:.2f}, have ${available:.2f}")
 
     # Daily loss limit
-    trades = await get_trades(limit=500, is_simulated=is_simulated)
+    trades = await get_trades(limit=500)
     today = date.today().isoformat()
     today_trades = [t for t in trades if t["created_at"].startswith(today)]
     daily_loss = sum(t["pnl"] for t in today_trades if t["pnl"] is not None and t["pnl"] < 0)

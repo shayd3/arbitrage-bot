@@ -88,7 +88,7 @@ class TestPreTradeChecksPass:
         bal, trades, cfg = patch_risk(balance={"available": 1000.0}, trades=[])
         with bal, trades, cfg:
             # 10 contracts @ 80¢ = $8 cost, max = $200 (20% of $1000)
-            await pre_trade_checks("KXNBA-LAL", "yes", 10, 80, is_simulated=True)
+            await pre_trade_checks("KXNBA-LAL", "yes", 10, 80)
 
 
 # ---------------------------------------------------------------------------
@@ -99,30 +99,30 @@ class TestPreTradeChecksInputValidation:
     async def test_zero_contracts(self):
         bal, trades, cfg = patch_risk()
         with bal, trades, cfg, pytest.raises(RiskError, match="positive"):
-            await pre_trade_checks("KXNBA-LAL", "yes", 0, 80, is_simulated=True)
+            await pre_trade_checks("KXNBA-LAL", "yes", 0, 80)
 
     async def test_negative_contracts(self):
         bal, trades, cfg = patch_risk()
         with bal, trades, cfg, pytest.raises(RiskError, match="positive"):
-            await pre_trade_checks("KXNBA-LAL", "yes", -5, 80, is_simulated=True)
+            await pre_trade_checks("KXNBA-LAL", "yes", -5, 80)
 
     async def test_price_zero(self):
         bal, trades, cfg = patch_risk()
         with bal, trades, cfg, pytest.raises(RiskError, match="Invalid price"):
-            await pre_trade_checks("KXNBA-LAL", "yes", 10, 0, is_simulated=True)
+            await pre_trade_checks("KXNBA-LAL", "yes", 10, 0)
 
     async def test_price_100(self):
         bal, trades, cfg = patch_risk()
         with bal, trades, cfg, pytest.raises(RiskError, match="Invalid price"):
-            await pre_trade_checks("KXNBA-LAL", "yes", 10, 100, is_simulated=True)
+            await pre_trade_checks("KXNBA-LAL", "yes", 10, 100)
 
     async def test_price_boundary_valid(self):
         """Prices 1 and 99 are valid."""
         bal, trades, cfg = patch_risk(balance={"available": 10_000.0})
         with bal, trades, cfg:
-            await pre_trade_checks("KXNBA-LAL", "yes", 1, 1, is_simulated=True)
+            await pre_trade_checks("KXNBA-LAL", "yes", 1, 1)
         with bal, trades, cfg:
-            await pre_trade_checks("KXNBA-LAL", "yes", 1, 99, is_simulated=True)
+            await pre_trade_checks("KXNBA-LAL", "yes", 1, 99)
 
 
 class TestPreTradeChecksBalanceLimits:
@@ -131,7 +131,7 @@ class TestPreTradeChecksBalanceLimits:
         # balance $1000, max = $200; 300 contracts @ 80¢ = $240
         bal, trades, cfg = patch_risk(balance={"available": 1000.0})
         with bal, trades, cfg, pytest.raises(RiskError, match="exceeds"):
-            await pre_trade_checks("KXNBA-LAL", "yes", 300, 80, is_simulated=True)
+            await pre_trade_checks("KXNBA-LAL", "yes", 300, 80)
 
     async def test_insufficient_balance(self):
         """Cost > available balance (even if < max_pct) should fail."""
@@ -139,13 +139,13 @@ class TestPreTradeChecksBalanceLimits:
         # Use a scenario where balance is really tiny
         bal, trades, cfg = patch_risk(balance={"available": 5.0})
         with bal, trades, cfg, pytest.raises(RiskError):
-            await pre_trade_checks("KXNBA-LAL", "yes", 10, 80, is_simulated=True)
+            await pre_trade_checks("KXNBA-LAL", "yes", 10, 80)
 
     async def test_no_balance_record(self):
         """If no balance row exists, available=0 → any cost fails."""
         bal, trades, cfg = patch_risk(balance=None)  # explicitly None → available=0
         with bal, trades, cfg, pytest.raises(RiskError):
-            await pre_trade_checks("KXNBA-NEW", "yes", 1, 50, is_simulated=True)
+            await pre_trade_checks("KXNBA-NEW", "yes", 1, 50)
 
 
 class TestPreTradeChecksDailyLoss:
@@ -155,7 +155,7 @@ class TestPreTradeChecksDailyLoss:
                   make_trade(ticker="KXNBA-BOS", pnl=-60.0, created_at=f"{today}T11:00:00")]
         bal, trd, cfg = patch_risk(trades=trades)
         with bal, trd, cfg, pytest.raises(RiskError, match="Daily loss"):
-            await pre_trade_checks("KXNBA-LAL", "yes", 1, 50, is_simulated=True)
+            await pre_trade_checks("KXNBA-LAL", "yes", 1, 50)
 
     async def test_daily_loss_from_yesterday_ignored(self):
         """Losses from prior days should not count toward today's limit."""
@@ -163,7 +163,7 @@ class TestPreTradeChecksDailyLoss:
         trades = [make_trade(ticker="KXNBA-OTHER", pnl=-99.0, created_at="2020-01-01T10:00:00")]
         bal, trd, cfg = patch_risk(trades=trades)
         with bal, trd, cfg:
-            await pre_trade_checks("KXNBA-NEW", "yes", 1, 50, is_simulated=True)
+            await pre_trade_checks("KXNBA-NEW", "yes", 1, 50)
 
     async def test_winning_trades_do_not_count(self):
         """Positive pnl should not trigger the loss limit."""
@@ -171,7 +171,7 @@ class TestPreTradeChecksDailyLoss:
         trades = [make_trade(ticker="KXNBA-OTHER", pnl=200.0, created_at=f"{today}T10:00:00")]
         bal, trd, cfg = patch_risk(trades=trades)
         with bal, trd, cfg:
-            await pre_trade_checks("KXNBA-NEW", "yes", 1, 50, is_simulated=True)
+            await pre_trade_checks("KXNBA-NEW", "yes", 1, 50)
 
 
 class TestPreTradeChecksOpenPositions:
@@ -180,36 +180,36 @@ class TestPreTradeChecksOpenPositions:
         trades = [make_trade(ticker=t, status="filled") for t in tickers]
         bal, trd, cfg = patch_risk(trades=trades)
         with bal, trd, cfg, pytest.raises(RiskError, match="concurrent positions"):
-            await pre_trade_checks("KXNBA-F", "yes", 1, 50, is_simulated=True)
+            await pre_trade_checks("KXNBA-F", "yes", 1, 50)
 
     async def test_settled_trades_not_counted_as_open(self):
         """Settled/cancelled positions don't count toward max_open_positions."""
         trades = [make_trade(ticker=f"KXNBA-{i}", status="settled") for i in range(10)]
         bal, trd, cfg = patch_risk(trades=trades)
         with bal, trd, cfg:
-            await pre_trade_checks("KXNBA-NEW", "yes", 1, 50, is_simulated=True)
+            await pre_trade_checks("KXNBA-NEW", "yes", 1, 50)
 
     async def test_duplicate_ticker_rejected(self):
         trades = [make_trade(ticker="KXNBA-LAL", status="filled")]
         bal, trd, cfg = patch_risk(trades=trades)
         with bal, trd, cfg, pytest.raises(RiskError, match="open position on KXNBA-LAL"):
-            await pre_trade_checks("KXNBA-LAL", "yes", 1, 50, is_simulated=True)
+            await pre_trade_checks("KXNBA-LAL", "yes", 1, 50)
 
     async def test_duplicate_game_id_rejected(self):
         trades = [make_trade(ticker="KXNBA-LAL", status="filled", game_id="game-123")]
         bal, trd, cfg = patch_risk(trades=trades)
         with bal, trd, cfg, pytest.raises(RiskError, match="game-123"):
-            await pre_trade_checks("KXNBA-BOS", "yes", 1, 50, is_simulated=True, game_id="game-123")
+            await pre_trade_checks("KXNBA-BOS", "yes", 1, 50, game_id="game-123")
 
     async def test_different_game_id_allowed(self):
         trades = [make_trade(ticker="KXNBA-LAL", status="filled", game_id="game-111")]
         bal, trd, cfg = patch_risk(trades=trades)
         with bal, trd, cfg:
-            await pre_trade_checks("KXNBA-BOS", "yes", 1, 50, is_simulated=True, game_id="game-222")
+            await pre_trade_checks("KXNBA-BOS", "yes", 1, 50, game_id="game-222")
 
     async def test_no_game_id_skips_game_check(self):
         """Passing game_id=None should not trigger the game duplicate check."""
         trades = [make_trade(ticker="KXNBA-LAL", status="filled", game_id="game-123")]
         bal, trd, cfg = patch_risk(trades=trades)
         with bal, trd, cfg:
-            await pre_trade_checks("KXNBA-BOS", "yes", 1, 50, is_simulated=True, game_id=None)
+            await pre_trade_checks("KXNBA-BOS", "yes", 1, 50, game_id=None)

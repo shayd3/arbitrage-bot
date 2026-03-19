@@ -25,7 +25,7 @@ router = APIRouter(prefix="/api")
 
 @router.get("/health")
 async def health():
-    return {"status": "ok", "mode": settings.bot_mode.value}
+    return {"status": "ok", "demo": settings.kalshi_use_demo}
 
 @router.get("/games")
 async def get_games(sport: Optional[str] = Query(None)):
@@ -76,9 +76,7 @@ async def get_balance():
             result["positions_error"] = positions_error
         return result
     except Exception as e:
-        # Surface auth/network errors so the UI can show them
-        is_simulated = settings.bot_mode.value != "live"
-        balance = await get_latest_balance(is_simulated=is_simulated)
+        balance = await get_latest_balance()
         return {
             "available": balance["available"] if balance else 0,
             "portfolio_value": balance["portfolio_value"] if balance else 0,
@@ -88,15 +86,12 @@ async def get_balance():
 
 @router.get("/balance/history")
 async def get_balance_history_endpoint(limit: int = 100):
-    history = await get_balance_history(
-        is_simulated=(settings.bot_mode.value != "live"),
-        limit=limit
-    )
+    history = await get_balance_history(limit=limit)
     return {"history": history}
 
 @router.get("/trades")
-async def get_trades_endpoint(limit: int = 100, simulated: Optional[bool] = None):
-    trades = await get_trades(limit=limit, is_simulated=simulated)
+async def get_trades_endpoint(limit: int = 100):
+    trades = await get_trades(limit=limit)
     return {"trades": trades}
 
 @router.get("/positions")
@@ -113,7 +108,7 @@ async def get_scanner_status():
     return {
         "running": scanner._running,
         "games_count": len(scanner.games),
-        "mode": settings.bot_mode.value,
+        "demo": settings.kalshi_use_demo,
     }
 
 @router.get("/scanner/log")
@@ -162,7 +157,7 @@ async def get_strategy():
                 "poll_interval": config.poll_interval,
             })
 
-    return {"global": global_config, "mode": settings.bot_mode.value, "sports": sports}
+    return {"global": global_config, "demo": settings.kalshi_use_demo, "sports": sports}
 
 @router.post("/strategy/global")
 async def set_global_strategy(body: GlobalStrategyBody):

@@ -12,7 +12,6 @@ services:
       - KALSHI_API_KEY_ID=${KALSHI_API_KEY_ID}
       - KALSHI_PRIVATE_KEY_PATH=/app/kalshi_private_key.pem
       - KALSHI_USE_DEMO=${KALSHI_USE_DEMO:-true}
-      - BOT_MODE=${BOT_MODE:-simulation}
       - DATABASE_PATH=/data/arbitrage.db
     restart: unless-stopped
     healthcheck:

@@ -44,7 +44,6 @@ export interface Trade {
   contracts: number
   price: number
   status: string
-  is_simulated: number
   pnl: number | null
   created_at: string
   settled_at: string | null
@@ -66,7 +65,6 @@ export interface Balance {
   available: number
   portfolio_value: number
   total: number
-  is_simulated?: number
   error?: string
 }
 
