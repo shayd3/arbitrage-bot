@@ -176,6 +176,29 @@ const SPORT_SERIES_TICKERS: Record<string, string> = {
   nhl: 'KXNHLGAME',
 }
 
+// ESPN abbreviation → Kalshi abbreviation overrides (where they differ)
+const ESPN_TO_KALSHI: Record<string, string> = {
+  WSH: 'WAS', SA: 'SAS', NY: 'NYK', GS: 'GSW', NO: 'NOP',
+}
+
+function toKalshiAbbr(espnAbbr: string): string {
+  const upper = espnAbbr.toUpperCase()
+  return ESPN_TO_KALSHI[upper] ?? upper
+}
+
+function matchMarketsForGame(game: Game, markets: KalshiMarket[]): KalshiMarket[] {
+  const sport = game.sport.toUpperCase()
+  const homeAbbr = toKalshiAbbr(game.home_team.abbreviation)
+  const awayAbbr = toKalshiAbbr(game.away_team.abbreviation)
+  return markets.filter(m => {
+    if (m.status !== 'open' && m.status !== 'active') return false
+    const ticker = m.ticker.toUpperCase()
+    if (!ticker.includes(sport)) return false
+    // Both teams must appear in the ticker (KXNBAGAME format: OKCORL)
+    return ticker.includes(homeAbbr) && ticker.includes(awayAbbr)
+  })
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function LiveGames() {
@@ -205,29 +228,6 @@ export default function LiveGames() {
   const games = gamesData?.games ?? []
   const markets = marketsData?.markets ?? []
   const activeSportConfig = strategy?.sports.find(s => s.sport === activeTab)
-
-  // ESPN abbreviation → Kalshi abbreviation overrides (where they differ)
-  const ESPN_TO_KALSHI: Record<string, string> = {
-    WSH: 'WAS', SA: 'SAS', NY: 'NYK', GS: 'GSW', NO: 'NOP',
-  }
-
-  function toKalshiAbbr(espnAbbr: string): string {
-    const upper = espnAbbr.toUpperCase()
-    return ESPN_TO_KALSHI[upper] ?? upper
-  }
-
-  function matchMarketsForGame(game: Game): KalshiMarket[] {
-    const sport = game.sport.toUpperCase()
-    const homeAbbr = toKalshiAbbr(game.home_team.abbreviation)
-    const awayAbbr = toKalshiAbbr(game.away_team.abbreviation)
-    return markets.filter(m => {
-      if (m.status !== 'open' && m.status !== 'active') return false
-      const ticker = m.ticker.toUpperCase()
-      if (!ticker.includes(sport)) return false
-      // Both teams must appear in the ticker (KXNBAGAME format: OKCORL)
-      return ticker.includes(homeAbbr) && ticker.includes(awayAbbr)
-    })
-  }
 
   return (
     <div className="space-y-5">
@@ -273,7 +273,7 @@ export default function LiveGames() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {games.map(game => (
-                <GameCard key={game.id} game={game} markets={matchMarketsForGame(game)} />
+                <GameCard key={game.id} game={game} markets={matchMarketsForGame(game, markets)} />
               ))}
             </div>
           )}
