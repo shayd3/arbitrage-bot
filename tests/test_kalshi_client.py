@@ -134,3 +134,15 @@ class TestParseMarket:
         raw.pop("volume_fp")
         m = _parse_market(raw)
         assert m.volume is None
+
+    def test_result_parsed(self):
+        m = _parse_market(self._raw(result="yes"))
+        assert m.result == "yes"
+
+    def test_result_no_parsed(self):
+        m = _parse_market(self._raw(result="no"))
+        assert m.result == "no"
+
+    def test_result_absent_is_none(self):
+        m = _parse_market(self._raw())
+        assert m.result is None

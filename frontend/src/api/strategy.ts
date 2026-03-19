@@ -11,6 +11,9 @@ export interface GlobalConfig {
   max_position_pct: number
   max_open_positions: number
   max_daily_loss: number
+  espn_poll_interval: number
+  kalshi_poll_interval: number
+  kalshi_sync_interval: number
 }
 
 export interface StrategyData {

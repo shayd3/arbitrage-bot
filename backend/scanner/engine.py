@@ -7,11 +7,77 @@ from backend.clients.kalshi import kalshi_client
 from backend.models import Game, GameStatus, KalshiMarket, Sport, Balance
 from backend.scanner.matcher import match_markets_to_games
 from backend.scanner.sports import get_sport_config, SPORT_SERIES_TICKER
-from backend.db import log_scanner, insert_balance
+from backend.db import log_scanner, insert_balance, get_filled_trades, settle_trade, sync_trade_from_order, get_config_override
 from backend.config import settings
 from backend.api.websocket import manager
 
 logger = logging.getLogger(__name__)
+
+async def sync_trades_from_kalshi():
+    """
+    Reconcile local DB against Kalshi's order history.
+    Inserts orders missing from the DB (e.g. placed while app was down)
+    and updates status on records that have drifted.
+    """
+    try:
+        orders = await kalshi_client.get_orders(limit=100)
+        synced = 0
+        for order in orders:
+            await sync_trade_from_order(order)
+            synced += 1
+        if synced:
+            logger.debug(f"Synced {synced} orders from Kalshi")
+    except Exception as e:
+        logger.error(f"Trade sync error: {e}", exc_info=True)
+
+async def check_settlements():
+    """
+    Check for settled trades using the /portfolio/settlements endpoint.
+    One API call builds a ticker→result map; all filled trades are resolved in-memory.
+    """
+    try:
+        trades = await get_filled_trades()
+        if not trades:
+            return
+
+        settlements = await kalshi_client.get_settlements(limit=200)
+        # Build ticker → result map (Kalshi may use market_ticker or ticker)
+        settled_map: dict[str, str] = {}
+        for s in settlements:
+            ticker = s.get("market_ticker") or s.get("ticker", "")
+            result = (s.get("market_result") or s.get("result", "")).lower()
+            if ticker and result in ("yes", "no"):
+                settled_map[ticker] = result
+
+        if not settled_map:
+            return
+
+        now = datetime.utcnow()
+        for trade in trades:
+            result = settled_map.get(trade["ticker"])
+            if not result:
+                continue
+
+            won = trade["side"] == result
+            contracts = trade["contracts"]
+            price = trade["price"]  # cents paid
+
+            pnl = contracts * (100 - price) / 100 if won else -(contracts * price) / 100
+
+            await settle_trade(trade["id"], pnl, now)
+            logger.info(
+                f"Settled trade {trade['id']} ({trade['ticker']}): "
+                f"side={trade['side']}, result={result}, pnl=${pnl:.2f}"
+            )
+            await log_scanner("info", f"Trade {trade['id']} settled", {
+                "trade_id": trade["id"],
+                "ticker": trade["ticker"],
+                "side": trade["side"],
+                "result": result,
+                "pnl": pnl,
+            })
+    except Exception as e:
+        logger.error(f"Settlement check error: {e}", exc_info=True)
 
 async def sync_balance():
     """Fetch Kalshi balance and store in DB so risk checks have current data."""
@@ -36,6 +102,11 @@ class ScannerEngine:
         self._markets: dict[Sport, list[KalshiMarket]] = {}
         self._last_balance_sync: float = 0.0
         self._last_market_fetch: float = 0.0
+        self._last_settlement_check: float = 0.0
+        self._last_trade_sync: float = 0.0
+        self._espn_interval: float = settings.espn_poll_interval
+        self._kalshi_interval: float = settings.kalshi_poll_interval
+        self._sync_interval: float = 1800.0  # DB↔Kalshi trade sync, default 30min
 
     async def start(self):
         if self._running:
@@ -63,18 +134,42 @@ class ScannerEngine:
             except Exception as e:
                 logger.error(f"Scanner error: {e}", exc_info=True)
                 await log_scanner("error", f"Scanner loop error: {e}")
-            await asyncio.sleep(settings.espn_poll_interval)
+            await asyncio.sleep(self._espn_interval)
+
+    async def _refresh_intervals(self):
+        """Read dynamic scan intervals from the config_overrides table."""
+        import json
+        val = await get_config_override("scanner_intervals")
+        if val:
+            try:
+                d = json.loads(val)
+                self._espn_interval = max(5.0, float(d.get("espn_poll_interval", settings.espn_poll_interval)))
+                self._kalshi_interval = max(10.0, float(d.get("kalshi_poll_interval", settings.kalshi_poll_interval)))
+                self._sync_interval = max(30.0, float(d.get("kalshi_sync_interval", 1800.0)))
+            except (json.JSONDecodeError, ValueError, TypeError):
+                pass
 
     async def _scan(self):
+        await self._refresh_intervals()
         now = time.monotonic()
 
+        # Sync orders from Kalshi (reconcile DB with remote state)
+        if now - self._last_trade_sync >= self._sync_interval:
+            await sync_trades_from_kalshi()
+            self._last_trade_sync = now
+
+        # Throttle settlement checks
+        if now - self._last_settlement_check >= self._kalshi_interval:
+            await check_settlements()
+            self._last_settlement_check = now
+
         # Throttle balance sync
-        if now - self._last_balance_sync >= settings.kalshi_poll_interval:
+        if now - self._last_balance_sync >= self._kalshi_interval:
             await sync_balance()
             self._last_balance_sync = now
 
         # 1. Fetch Kalshi markets (throttled separately)
-        if now - self._last_market_fetch >= settings.kalshi_poll_interval:
+        if now - self._last_market_fetch >= self._kalshi_interval:
             await self._fetch_all_markets()
             self._last_market_fetch = now
 
