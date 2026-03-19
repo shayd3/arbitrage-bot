@@ -131,6 +131,89 @@ async def get_balance_history(limit: int = 100) -> list[dict]:
     rows = await cursor.fetchall()
     return [dict(r) for r in rows]
 
+async def sync_trade_from_order(order: dict, *, commit: bool = True):
+    """
+    Upsert a trade record from a raw Kalshi order dict.
+    - Inserts if the kalshi_order_id is not yet in the DB.
+    - Updates status if it has changed (e.g. pending → filled).
+    game_id will be null for orders not captured at placement time.
+    Set commit=False to batch multiple calls and commit externally.
+    """
+    order_id = order.get("order_id")
+    if not order_id:
+        return
+
+    ticker = order.get("ticker", "")
+    side = order.get("side", "")  # "yes" or "no"
+    contracts = order.get("filled_count") or order.get("count") or 0
+    # Price paid in cents: yes_price if side=yes; for NO orders derive from yes_price
+    # (Kalshi API always sends yes_price; NO orders are placed at 100 - yes_price)
+    if side == "yes":
+        price = round(float(order.get("yes_price") or order.get("yes_bid") or 0))
+    else:
+        no_price = order.get("no_price") or order.get("no_bid")
+        if no_price:
+            price = round(float(no_price))
+        else:
+            yes_price = float(order.get("yes_price") or order.get("yes_bid") or 0)
+            price = round(100 - yes_price) if yes_price else 0
+
+    kalshi_status = order.get("status", "")
+    if kalshi_status == "filled":
+        status = "filled"
+    elif kalshi_status in ("canceled", "cancelled"):
+        status = "cancelled"
+    else:
+        status = "pending"
+
+    created_time = order.get("created_time") or datetime.utcnow().isoformat()
+
+    db = await get_db()
+    existing = await db.execute(
+        "SELECT id, status FROM trades WHERE kalshi_order_id = ?", (order_id,)
+    )
+    row = await existing.fetchone()
+
+    if row is None:
+        # New order not in DB — insert it
+        if contracts > 0 and ticker:
+            await db.execute(
+                """INSERT INTO trades (kalshi_order_id, ticker, side, contracts, price, status, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (order_id, ticker, side, contracts, price, status, created_time)
+            )
+    else:
+        # Update status if it has advanced (avoid going backwards)
+        STATUS_RANK = {"pending": 0, "filled": 1, "settled": 2, "cancelled": 1}
+        current_rank = STATUS_RANK.get(row["status"], 0)
+        new_rank = STATUS_RANK.get(status, 0)
+        if new_rank > current_rank:
+            await db.execute(
+                "UPDATE trades SET status = ? WHERE id = ?",
+                (status, row["id"])
+            )
+
+    if commit:
+        await db.commit()
+
+async def get_filled_trades() -> list[dict]:
+    """Return all trades with status='filled' — candidates for settlement checking."""
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT * FROM trades WHERE status = 'filled'"
+    )
+    rows = await cursor.fetchall()
+    return [dict(r) for r in rows]
+
+async def settle_trade(trade_id: int, pnl: float, settled_at: datetime):
+    """Mark a trade as settled with its P&L."""
+    db = await get_db()
+    await db.execute(
+        "UPDATE trades SET status = 'settled', pnl = ?, settled_at = ? WHERE id = ?",
+        (pnl, settled_at.isoformat(), trade_id)
+    )
+    await db.commit()
+
 async def log_scanner(level: str, message: str, data: dict | None = None):
     import json
     db = await get_db()

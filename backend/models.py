@@ -55,6 +55,7 @@ class KalshiMarket(BaseModel):
     volume: Optional[int] = None
     open_interest: Optional[int] = None
     close_time: Optional[datetime] = None
+    result: Optional[str] = None  # "yes" or "no" after settlement
 
 class TradeStatus(str, Enum):
     PENDING = "pending"

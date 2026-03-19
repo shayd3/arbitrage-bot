@@ -44,6 +44,7 @@ def _parse_market(m: dict) -> "KalshiMarket":
         volume=_fp_to_int(m.get("volume_fp") or m.get("volume")),
         open_interest=_fp_to_int(m.get("open_interest_fp") or m.get("open_interest")),
         close_time=m.get("close_time"),
+        result=m.get("result"),
     )
 
 class KalshiClient:
@@ -154,6 +155,19 @@ class KalshiClient:
         }
         data = await self._request("POST", "/portfolio/orders", json=body)
         return data.get("order", {})
+
+    async def get_orders(self, status: str = "", limit: int = 100) -> list[dict]:
+        """Fetch portfolio orders. status: 'resting', 'filled', 'canceled', or '' for all."""
+        params: dict = {"limit": limit}
+        if status:
+            params["status"] = status
+        data = await self._request("GET", "/portfolio/orders", params=params)
+        return data.get("orders", [])
+
+    async def get_settlements(self, limit: int = 100) -> list[dict]:
+        """Fetch portfolio settlement events from /portfolio/settlements."""
+        data = await self._request("GET", "/portfolio/settlements", params={"limit": limit})
+        return data.get("settlements", [])
 
     async def get_positions(self) -> list[dict]:
         data = await self._request("GET", "/portfolio/positions")

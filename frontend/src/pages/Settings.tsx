@@ -12,7 +12,7 @@ function StatCard({ label, value }: { label: string; value: string }) {
 }
 
 function GlobalEditor({ data, onSave }: { data: GlobalConfig; onSave: (c: Partial<GlobalConfig>) => Promise<void> }) {
-  const { editing, setEditing, pct, setPct, positions, setPositions, loss, setLoss, saving, setSaving, buildConfig } =
+  const { editing, setEditing, pct, setPct, positions, setPositions, loss, setLoss, espnInterval, setEspnInterval, kalshiInterval, setKalshiInterval, syncInterval, setSyncInterval, saving, setSaving, buildConfig } =
     useGlobalConfigEditor(data)
 
   const handleSave = async () => {
@@ -55,6 +55,30 @@ function GlobalEditor({ data, onSave }: { data: GlobalConfig; onSave: (c: Partia
           <span className="text-gray-400 text-sm">$</span>
           <input type="number" min="0" value={loss} onChange={e => setLoss(e.target.value)}
             className="w-20 bg-gray-900 border border-gray-600 rounded px-2 py-1.5 text-sm text-white" />
+        </div>
+      </div>
+      <div>
+        <div className="text-xs text-gray-500 mb-1">ESPN Poll</div>
+        <div className="flex items-center gap-1">
+          <input type="number" min="5" step="1" value={espnInterval} onChange={e => setEspnInterval(e.target.value)}
+            className="w-16 bg-gray-900 border border-gray-600 rounded px-2 py-1.5 text-sm text-white" />
+          <span className="text-gray-400 text-sm">s</span>
+        </div>
+      </div>
+      <div>
+        <div className="text-xs text-gray-500 mb-1">Kalshi Poll</div>
+        <div className="flex items-center gap-1">
+          <input type="number" min="10" step="1" value={kalshiInterval} onChange={e => setKalshiInterval(e.target.value)}
+            className="w-16 bg-gray-900 border border-gray-600 rounded px-2 py-1.5 text-sm text-white" />
+          <span className="text-gray-400 text-sm">s</span>
+        </div>
+      </div>
+      <div>
+        <div className="text-xs text-gray-500 mb-1">DB Sync</div>
+        <div className="flex items-center gap-1">
+          <input type="number" min="30" step="1" value={syncInterval} onChange={e => setSyncInterval(e.target.value)}
+            className="w-16 bg-gray-900 border border-gray-600 rounded px-2 py-1.5 text-sm text-white" />
+          <span className="text-gray-400 text-sm">s</span>
         </div>
       </div>
       <div className="flex gap-2">
@@ -177,10 +201,13 @@ export default function Settings() {
           <h2 className="text-sm font-medium text-gray-400">Global Configuration</h2>
           <GlobalEditor data={g} onSave={(c) => globalMutation.mutateAsync(c)} />
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
           <StatCard label="Bet % of Balance" value={`${g.max_position_pct}%`} />
           <StatCard label="Max Positions" value={String(g.max_open_positions)} />
           <StatCard label="Max Daily Loss" value={`$${g.max_daily_loss}`} />
+          <StatCard label="ESPN Poll" value={`${g.espn_poll_interval ?? 10}s`} />
+          <StatCard label="Kalshi Poll" value={`${g.kalshi_poll_interval ?? 15}s`} />
+          <StatCard label="DB Sync" value={`${g.kalshi_sync_interval ?? 1800}s`} />
           <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
             <div className="text-xs text-gray-500 mb-1">Env</div>
             <div className={`text-xl font-bold uppercase ${demo ? 'text-yellow-400' : 'text-green-400'}`}>{demo ? 'demo' : 'live'}</div>

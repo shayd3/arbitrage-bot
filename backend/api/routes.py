@@ -19,6 +19,9 @@ class GlobalStrategyBody(BaseModel):
     max_position_pct: Optional[int] = None
     max_open_positions: Optional[int] = None
     max_daily_loss: Optional[float] = None
+    espn_poll_interval: Optional[float] = None
+    kalshi_poll_interval: Optional[float] = None
+    kalshi_sync_interval: Optional[float] = None
 
 router = APIRouter(prefix="/api")
 
@@ -149,6 +152,19 @@ async def get_strategy():
         except (json.JSONDecodeError, KeyError):
             pass
 
+    interval_override = await get_config_override("scanner_intervals")
+    global_config["espn_poll_interval"] = settings.espn_poll_interval
+    global_config["kalshi_poll_interval"] = settings.kalshi_poll_interval
+    global_config["kalshi_sync_interval"] = 1800.0
+    if interval_override:
+        try:
+            d = json.loads(interval_override)
+            global_config["espn_poll_interval"] = max(5.0, float(d.get("espn_poll_interval", settings.espn_poll_interval)))
+            global_config["kalshi_poll_interval"] = max(10.0, float(d.get("kalshi_poll_interval", settings.kalshi_poll_interval)))
+            global_config["kalshi_sync_interval"] = max(30.0, float(d.get("kalshi_sync_interval", 1800.0)))
+        except (json.JSONDecodeError, ValueError, TypeError):
+            pass
+
     sports = []
     for sport in Sport:
         if sport in SPORT_CONFIGS:
@@ -167,16 +183,45 @@ async def get_strategy():
 @router.post("/strategy/global")
 async def set_global_strategy(body: GlobalStrategyBody):
     import json
-    existing_json = await get_config_override("global_risk")
-    current: dict = {}
-    if existing_json:
-        try:
-            current = json.loads(existing_json)
-        except json.JSONDecodeError:
-            pass
-    current.update(body.model_dump(exclude_none=True))
-    await set_config_override("global_risk", json.dumps(current))
-    return {"config": current}
+    payload = body.model_dump(exclude_none=True)
+
+    # Persist risk fields separately from interval fields
+    risk_keys = {"max_position_pct", "max_open_positions", "max_daily_loss"}
+    interval_keys = {"espn_poll_interval", "kalshi_poll_interval", "kalshi_sync_interval"}
+
+    risk_update = {k: v for k, v in payload.items() if k in risk_keys}
+    interval_update = {k: v for k, v in payload.items() if k in interval_keys}
+
+    if risk_update:
+        existing_json = await get_config_override("global_risk")
+        current: dict = {}
+        if existing_json:
+            try:
+                current = json.loads(existing_json)
+            except json.JSONDecodeError:
+                pass
+        current.update(risk_update)
+        await set_config_override("global_risk", json.dumps(current))
+
+    if interval_update:
+        # Enforce minimum floors before persisting
+        if "espn_poll_interval" in interval_update:
+            interval_update["espn_poll_interval"] = max(5.0, float(interval_update["espn_poll_interval"]))
+        if "kalshi_poll_interval" in interval_update:
+            interval_update["kalshi_poll_interval"] = max(10.0, float(interval_update["kalshi_poll_interval"]))
+        if "kalshi_sync_interval" in interval_update:
+            interval_update["kalshi_sync_interval"] = max(30.0, float(interval_update["kalshi_sync_interval"]))
+        existing_json = await get_config_override("scanner_intervals")
+        current_intervals: dict = {}
+        if existing_json:
+            try:
+                current_intervals = json.loads(existing_json)
+            except json.JSONDecodeError:
+                pass
+        current_intervals.update(interval_update)
+        await set_config_override("scanner_intervals", json.dumps(current_intervals))
+
+    return {"config": payload}
 
 @router.post("/strategy/sport/{sport}")
 async def set_sport_strategy(sport: str, body: SportStrategyBody):

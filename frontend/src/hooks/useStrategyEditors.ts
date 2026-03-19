@@ -11,6 +11,9 @@ export function useGlobalConfigEditor(g: GlobalConfig) {
   const [pct, setPct] = useState(String(g.max_position_pct))
   const [positions, setPositions] = useState(String(g.max_open_positions))
   const [loss, setLoss] = useState(String(g.max_daily_loss))
+  const [espnInterval, setEspnInterval] = useState(String(g.espn_poll_interval ?? 10))
+  const [kalshiInterval, setKalshiInterval] = useState(String(g.kalshi_poll_interval ?? 15))
+  const [syncInterval, setSyncInterval] = useState(String(g.kalshi_sync_interval ?? 1800))
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -18,16 +21,22 @@ export function useGlobalConfigEditor(g: GlobalConfig) {
       setPct(String(g.max_position_pct))
       setPositions(String(g.max_open_positions))
       setLoss(String(g.max_daily_loss))
+      setEspnInterval(String(g.espn_poll_interval ?? 10))
+      setKalshiInterval(String(g.kalshi_poll_interval ?? 15))
+      setSyncInterval(String(g.kalshi_sync_interval ?? 1800))
     }
-  }, [g.max_position_pct, g.max_open_positions, g.max_daily_loss, editing])
+  }, [g.max_position_pct, g.max_open_positions, g.max_daily_loss, g.espn_poll_interval, g.kalshi_poll_interval, g.kalshi_sync_interval, editing])
 
   const buildConfig = (): Partial<GlobalConfig> => ({
     max_position_pct: parseInt(pct),
     max_open_positions: parseInt(positions),
     max_daily_loss: parseFloat(loss),
+    espn_poll_interval: Math.max(5, parseFloat(espnInterval)),
+    kalshi_poll_interval: Math.max(10, parseFloat(kalshiInterval)),
+    kalshi_sync_interval: Math.max(30, parseFloat(syncInterval)),
   })
 
-  return { editing, setEditing, pct, setPct, positions, setPositions, loss, setLoss, saving, setSaving, buildConfig }
+  return { editing, setEditing, pct, setPct, positions, setPositions, loss, setLoss, espnInterval, setEspnInterval, kalshiInterval, setKalshiInterval, syncInterval, setSyncInterval, saving, setSaving, buildConfig }
 }
 
 /**
