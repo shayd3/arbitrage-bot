@@ -7,6 +7,8 @@ from backend.scanner.matcher import (
     team_to_kalshi_abbrev,
     _ticker_contains_team,
     match_game_to_markets,
+    match_markets_to_games,
+    sport_from_ticker,
     GameMarketMatch,
     _GAME_TIME_TOLERANCE_SECS,
 )
@@ -274,3 +276,120 @@ class TestGameMarketMatch:
     def test_lead_always_positive(self):
         m = self._make_match(80, 110, home_team_wins=True)
         assert m.lead == 30
+
+
+# ---------------------------------------------------------------------------
+# sport_from_ticker
+# ---------------------------------------------------------------------------
+
+class TestSportFromTicker:
+    def test_nba_game_prefix(self):
+        assert sport_from_ticker("KXNBAGAME-26MAR17LALBOS-LAL") == Sport.NBA
+
+    def test_nba_short_prefix(self):
+        assert sport_from_ticker("KXNBA-LAL-BOS-20260317") == Sport.NBA
+
+    def test_nfl_game_prefix(self):
+        assert sport_from_ticker("KXNFLGAME-17SEP24NENGB-NE") == Sport.NFL
+
+    def test_nfl_short_prefix(self):
+        assert sport_from_ticker("KXNFL-NE-GB-20260317") == Sport.NFL
+
+    def test_mlb_game_prefix(self):
+        assert sport_from_ticker("KXMLBGAME-17SEP24NYYBOS-NYY") == Sport.MLB
+
+    def test_nhl_game_prefix(self):
+        assert sport_from_ticker("KXNHLGAME-17SEP24BOSNYC-BOS") == Sport.NHL
+
+    def test_case_insensitive(self):
+        assert sport_from_ticker("kxnbagame-lal-bos") == Sport.NBA
+
+    def test_unknown_prefix_returns_none(self):
+        assert sport_from_ticker("UNKNOWN-TICKER") is None
+
+    def test_empty_string_returns_none(self):
+        assert sport_from_ticker("") is None
+
+
+# ---------------------------------------------------------------------------
+# match_markets_to_games
+# ---------------------------------------------------------------------------
+
+class TestMatchMarketsToGames:
+    def _make_nba_game(self, game_id="g1", home_name="Los Angeles Lakers",
+                       home_abbrev="LAL", away_name="Boston Celtics",
+                       away_abbrev="BOS") -> Game:
+        return Game(
+            id=game_id, sport=Sport.NBA,
+            home_team=Team(id="h", name=home_name, abbreviation=home_abbrev, score=0),
+            away_team=Team(id="a", name=away_name, abbreviation=away_abbrev, score=0),
+            status=GameStatus.IN_PROGRESS,
+        )
+
+    def test_single_market_matches_game(self):
+        game = self._make_nba_game()
+        market = make_market("KXNBAGAME-26MAR17LALBOS-LAL", status="active")
+        pairs = match_markets_to_games([market], [game])
+        assert len(pairs) == 1
+        assert pairs[0] == (game, market)
+
+    def test_multiple_markets_match_same_game(self):
+        """Two outcome markets for the same matchup should both pair with the game."""
+        game = self._make_nba_game(
+            home_name="Orlando Magic", home_abbrev="ORL",
+            away_name="Oklahoma City Thunder", away_abbrev="OKC",
+        )
+        market_okc = make_market("KXNBAGAME-26MAR17OKCORL-OKC", status="active")
+        market_orl = make_market("KXNBAGAME-26MAR17OKCORL-ORL", status="active")
+        pairs = match_markets_to_games([market_okc, market_orl], [game])
+        assert len(pairs) == 2
+        assert (game, market_okc) in pairs
+        assert (game, market_orl) in pairs
+
+    def test_non_matching_markets_skipped(self):
+        """Markets that don't match any game produce no pairs."""
+        game = self._make_nba_game()
+        market = make_market("KXNBAGAME-26MAR17MIACHA-MIA", status="active")
+        pairs = match_markets_to_games([market], [game])
+        assert pairs == []
+
+    def test_wrong_sport_markets_skipped(self):
+        """NFL market does not pair with an NBA game."""
+        game = self._make_nba_game()
+        market = make_market("KXNFLGAME-17SEP24LALBOS-LAL", status="active")
+        pairs = match_markets_to_games([market], [game])
+        assert pairs == []
+
+    def test_unknown_ticker_prefix_skipped(self):
+        """Market with unrecognised prefix produces no pair."""
+        game = self._make_nba_game()
+        market = make_market("UNKNOWN-LAL-BOS", status="active")
+        pairs = match_markets_to_games([market], [game])
+        assert pairs == []
+
+    def test_empty_inputs_return_empty(self):
+        assert match_markets_to_games([], []) == []
+        assert match_markets_to_games([make_market()], []) == []
+        game = self._make_nba_game()
+        assert match_markets_to_games([], [game]) == []
+
+    def test_markets_across_multiple_games(self):
+        """Each market is paired with only its corresponding game."""
+        game_lal_bos = self._make_nba_game(game_id="g1")
+        game_okc_orl = self._make_nba_game(
+            game_id="g2",
+            home_name="Orlando Magic", home_abbrev="ORL",
+            away_name="Oklahoma City Thunder", away_abbrev="OKC",
+        )
+        market_lal = make_market("KXNBAGAME-26MAR17LALBOS-LAL", status="active")
+        market_bos = make_market("KXNBAGAME-26MAR17LALBOS-BOS", status="active")
+        market_okc = make_market("KXNBAGAME-26MAR17OKCORL-OKC", status="active")
+
+        pairs = match_markets_to_games(
+            [market_lal, market_bos, market_okc],
+            [game_lal_bos, game_okc_orl],
+        )
+        assert len(pairs) == 3
+        game_ids = [g.id for g, _ in pairs]
+        assert game_ids.count("g1") == 2
+        assert game_ids.count("g2") == 1
