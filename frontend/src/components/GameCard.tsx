@@ -90,12 +90,11 @@ function computePnL(trade: Trade, markets: KalshiMarket[]): number | null {
   if (!market) return null
   const currentValue = trade.side === 'yes' ? market.yes_bid : market.no_bid
   if (currentValue == null) return null
-  return (currentValue - trade.price) * trade.contracts
+  return ((currentValue - trade.price) * trade.contracts) / 100
 }
 
 function TradeRow({ trade, markets }: { trade: Trade; markets: KalshiMarket[] }) {
-  const pnlCents = computePnL(trade, markets)
-  const pnlDollars = pnlCents != null ? pnlCents / 100 : null
+  const pnlDollars = computePnL(trade, markets)
   const sideColor = trade.side === 'yes' ? 'text-green-400' : 'text-red-400'
 
   return (
@@ -117,7 +116,7 @@ function TradeRow({ trade, markets }: { trade: Trade; markets: KalshiMarket[] })
 function TradeStrip({ trades, markets }: { trades: Trade[]; markets: KalshiMarket[] }) {
   return (
     <div className="border-t border-yellow-500/30 pt-2 space-y-1.5">
-      <span className="text-[10px] font-semibold uppercase text-yellow-400 tracking-wide">Active Trade</span>
+      <span className="text-[10px] font-semibold uppercase text-yellow-400 tracking-wide">Active Trade{trades.length !== 1 ? 's' : ''}</span>
       {trades.map(t => (
         <TradeRow key={t.id} trade={t} markets={markets} />
       ))}

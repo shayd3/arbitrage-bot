@@ -213,10 +213,11 @@ export default function LiveGames() {
 
   const { data: gamesData, isLoading: gamesLoading } = useGames(activeTab)
   const { data: marketsData } = useMarkets(SPORT_SERIES_TICKERS[activeTab])
-  const { data: tradesData } = useTrades()
+  const { data: tradesData } = useTrades(strategy != null ? strategy.mode === 'simulation' : undefined)
 
   const tradesByGame = (tradesData?.trades ?? []).reduce((map, trade) => {
-    if (!trade.game_id || trade.status === 'cancelled') return map
+    if (!trade.game_id) return map
+    if (trade.status !== 'pending' && trade.status !== 'filled') return map
     const list = map.get(trade.game_id) ?? []
     list.push(trade)
     map.set(trade.game_id, list)
