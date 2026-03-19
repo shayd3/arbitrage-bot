@@ -10,15 +10,14 @@ The scanner is the bot's main background process. It runs continuously as an asy
 every espn_poll_interval (~10s):
   └── _scan()
         ├── _refresh_intervals()          — reload any config changes
+        ├── [throttled to kalshi_sync_interval (default 30min)]
+        │     └── sync_trades_from_kalshi() — reconcile DB with Kalshi orders
         ├── [throttled to kalshi_poll_interval]
-        │     ├── sync_trades_from_kalshi() — reconcile DB with Kalshi orders
         │     ├── check_settlements()       — detect settled trades, write P&L
         │     ├── sync_balance()            — snapshot current balance
         │     └── _fetch_all_markets()      — refresh open Kalshi markets
         ├── fetch_games() (ESPN)            — get live scores for all active sports
         └── _process_game_markets()         — evaluate opportunities + place orders
-              └── [throttled to kalshi_sync_interval]
-                    └── sync_trades_from_kalshi()
 ```
 
 > **Note:** `kalshi_sync_interval` is the interval for the DB↔Kalshi trade reconciliation and defaults to 30 minutes. The other Kalshi calls (settlements, balance, markets) run on `kalshi_poll_interval` (default 15s).
