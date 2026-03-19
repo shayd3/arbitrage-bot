@@ -1,9 +1,10 @@
-import type { Game, KalshiMarket, Trade } from '../types'
+import type { Game, KalshiMarket, Trade, KalshiPosition } from '../types'
 
 interface Props {
   game: Game
   markets: KalshiMarket[]
   trades?: Trade[]
+  positionsByTicker?: Map<string, KalshiPosition>
 }
 
 function ScoreBadge({ score, isLeading }: { score: number; isLeading: boolean }) {
@@ -84,8 +85,40 @@ function MarketRow({ market }: { market: KalshiMarket }) {
   )
 }
 
-function computePnL(trade: Trade, markets: KalshiMarket[]): number | null {
+function computeOutcomePnL(trade: Trade, game: Game): number | null {
+  if (game.status !== 'final') return null
+  // Extract YES team abbreviation from ticker: "KXNBAGAME-26MAR18GSWBOS-BOS" → "BOS"
+  const parts = trade.ticker.split('-')
+  const yesTeam = parts[parts.length - 1].toUpperCase()
+  const home = game.home_team.abbreviation.toUpperCase()
+  const away = game.away_team.abbreviation.toUpperCase()
+
+  let yesTeamWon: boolean
+  if (yesTeam === home || home.includes(yesTeam) || yesTeam.includes(home)) {
+    yesTeamWon = game.home_team.score > game.away_team.score
+  } else if (yesTeam === away || away.includes(yesTeam) || yesTeam.includes(away)) {
+    yesTeamWon = game.away_team.score > game.home_team.score
+  } else {
+    return null
+  }
+
+  const betWon = trade.side === 'yes' ? yesTeamWon : !yesTeamWon
+  return betWon
+    ? (trade.contracts * (100 - trade.price)) / 100
+    : -(trade.contracts * trade.price) / 100
+}
+
+function computePnL(trade: Trade, game: Game, markets: KalshiMarket[], position?: KalshiPosition): number | null {
   if (trade.pnl != null) return trade.pnl
+  // For final games, compute from actual game outcome
+  const outcomePnL = computeOutcomePnL(trade, game)
+  if (outcomePnL != null) return outcomePnL
+  // Use Kalshi's reported values when available (most accurate for in-progress)
+  if (position?.market_exposure_dollars != null && position?.total_traded_dollars != null) {
+    const marketValue = parseFloat(position.market_exposure_dollars)
+    const cost = parseFloat(position.total_traded_dollars)
+    if (!isNaN(marketValue) && !isNaN(cost) && marketValue !== cost) return marketValue - cost
+  }
   const market = markets.find(m => m.ticker === trade.ticker)
   if (!market) return null
   const currentValue = trade.side === 'yes' ? market.yes_bid : market.no_bid
@@ -93,8 +126,8 @@ function computePnL(trade: Trade, markets: KalshiMarket[]): number | null {
   return ((currentValue - trade.price) * trade.contracts) / 100
 }
 
-function TradeRow({ trade, markets }: { trade: Trade; markets: KalshiMarket[] }) {
-  const pnlDollars = computePnL(trade, markets)
+function TradeRow({ trade, game, markets, position }: { trade: Trade; game: Game; markets: KalshiMarket[]; position?: KalshiPosition }) {
+  const pnlDollars = computePnL(trade, game, markets, position)
   const sideColor = trade.side === 'yes' ? 'text-green-400' : 'text-red-400'
 
   return (
@@ -113,23 +146,33 @@ function TradeRow({ trade, markets }: { trade: Trade; markets: KalshiMarket[] })
   )
 }
 
-function TradeStrip({ trades, markets }: { trades: Trade[]; markets: KalshiMarket[] }) {
+function TradeStrip({ trades, game, markets, positionsByTicker }: { trades: Trade[]; game: Game; markets: KalshiMarket[]; positionsByTicker?: Map<string, KalshiPosition> }) {
   return (
     <div className="border-t border-yellow-500/30 pt-2 space-y-1.5">
-      <span className="text-[10px] font-semibold uppercase text-yellow-400 tracking-wide">Active Trade{trades.length !== 1 ? 's' : ''}</span>
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[10px] font-semibold uppercase text-yellow-400 tracking-wide">Active Trade{trades.length !== 1 ? 's' : ''}</span>
+        {trades.map(t => {
+          const shortTicker = t.ticker.replace(/^KX(NBA|NFL|MLB|NHL)(GAME)?-?/i, '')
+          return (
+            <span key={t.id} className="text-[10px] font-mono text-yellow-400/70 bg-yellow-500/10 px-1.5 py-0.5 rounded">
+              {shortTicker}
+            </span>
+          )
+        })}
+      </div>
       {trades.map(t => (
-        <TradeRow key={t.id} trade={t} markets={markets} />
+        <TradeRow key={t.id} trade={t} game={game} markets={markets} position={positionsByTicker?.get(t.ticker)} />
       ))}
     </div>
   )
 }
 
-export default function GameCard({ game, markets, trades }: Props) {
+export default function GameCard({ game, markets, trades, positionsByTicker }: Props) {
   const homeLeading = game.home_team.score > game.away_team.score
   const awayLeading = game.away_team.score > game.home_team.score
 
   return (
-    <div className={`bg-gray-900 border rounded-xl p-4 space-y-3 ${trades?.length ? 'border-yellow-500/60' : 'border-gray-800'}`}>
+    <div className={`bg-gray-900 border rounded-xl p-4 space-y-3 ${trades?.length ? 'border-yellow-500/60 active-trade-card' : 'border-gray-800'}`}>
       <div className="flex items-center justify-between">
         <span className="text-xs text-gray-500 uppercase tracking-wide">{game.sport}</span>
         <ClockBadge game={game} />
@@ -148,7 +191,7 @@ export default function GameCard({ game, markets, trades }: Props) {
       </div>
 
       {trades && trades.length > 0 && (
-        <TradeStrip trades={trades} markets={markets} />
+        <TradeStrip trades={trades} game={game} markets={markets} positionsByTicker={positionsByTicker} />
       )}
 
       {markets.length > 0 && (

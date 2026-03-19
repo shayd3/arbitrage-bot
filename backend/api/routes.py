@@ -57,7 +57,15 @@ async def get_balance():
     try:
         cents = await kalshi_client.get_balance()
         available = int(cents) / 100
-        return {"available": available, "portfolio_value": 0, "total": available}
+        try:
+            positions = await kalshi_client.get_positions()
+            portfolio_value = sum(
+                float(p.get("market_exposure_dollars", 0) or 0)
+                for p in positions
+            )
+        except Exception:
+            portfolio_value = 0.0
+        return {"available": available, "portfolio_value": portfolio_value, "total": available + portfolio_value}
     except Exception as e:
         # Surface auth/network errors so the UI can show them
         is_simulated = settings.bot_mode.value != "live"
@@ -81,6 +89,14 @@ async def get_balance_history_endpoint(limit: int = 100):
 async def get_trades_endpoint(limit: int = 100, simulated: Optional[bool] = None):
     trades = await get_trades(limit=limit, is_simulated=simulated)
     return {"trades": trades}
+
+@router.get("/positions")
+async def get_positions():
+    try:
+        positions = await kalshi_client.get_positions()
+        return {"positions": positions}
+    except Exception as e:
+        return {"positions": [], "error": str(e)}
 
 @router.get("/scanner/status")
 async def get_scanner_status():

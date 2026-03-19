@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import type { Game, KalshiMarket, Trade, Balance } from '../types'
+import type { Game, KalshiMarket, Trade, Balance, KalshiPosition } from '../types'
 
 const API_BASE = '/api'
 
@@ -41,6 +41,14 @@ export function useTrades(simulated?: boolean) {
       return fetchJson<{ trades: Trade[] }>(url)
     },
     refetchInterval: 5000,
+  })
+}
+
+export function usePositions() {
+  return useQuery({
+    queryKey: ['positions'],
+    queryFn: () => fetchJson<{ positions: KalshiPosition[] }>(`${API_BASE}/positions`),
+    refetchInterval: 15000,
   })
 }
 
