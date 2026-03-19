@@ -3,6 +3,7 @@ Match ESPN game objects to Kalshi market tickers.
 Uses static alias lookup for safety (no fuzzy matching on financial data).
 """
 import re
+from datetime import timezone
 from backend.models import Game, KalshiMarket, Sport
 
 # Team name aliases → canonical abbreviation used in Kalshi tickers
@@ -144,7 +145,6 @@ def match_game_to_markets(game: Game, markets: list[KalshiMarket]) -> list[Kalsh
         # Game winner markets close at tipoff, so close_time should be within a few hours
         # of the game's start_time. If they're far apart, it's a different day's game.
         if game.start_time and market.close_time:
-            from datetime import timezone
             game_start = game.start_time
             market_close = market.close_time
             # Normalise to UTC-aware for comparison
