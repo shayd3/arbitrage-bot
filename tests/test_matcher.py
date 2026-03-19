@@ -329,6 +329,9 @@ class TestSportFromTicker:
     def test_wnba_game_prefix(self):
         assert sport_from_ticker("KXWNBAGAME-26MAY25LVNY-LV") == Sport.WNBA
 
+    def test_cbb_game_prefix(self):
+        assert sport_from_ticker("KXCBBGAME-26MAR25DUKUNC-DUK") == Sport.CBB
+
     def test_case_insensitive(self):
         assert sport_from_ticker("kxnbagame-lal-bos") == Sport.NBA
 

@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 from typing import Optional
 from backend.models import Game, Team, GameClock, GameStatus, Sport
-from backend.scanner.sports import SPORT_CONFIGS
+from backend.scanner.sports import get_sport_config
 
 logger = logging.getLogger(__name__)
 
@@ -16,11 +16,10 @@ ESPN_ENDPOINTS = {
     Sport.CBB: "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard",
 }
 
-def _parse_clock(competition: dict, sport: Sport) -> Optional[GameClock]:
+def _parse_clock(competition: dict, regular_periods: int) -> Optional[GameClock]:
     status = competition.get("status", {})
     period = status.get("period", 0)
     display_clock = status.get("displayClock", "0:00")
-    regular_periods = SPORT_CONFIGS[sport].regular_periods
     period_type = "overtime" if period > regular_periods else "regular"
 
     # Parse seconds remaining from display clock
@@ -47,7 +46,7 @@ def _parse_game_status(competition: dict) -> GameStatus:
         return GameStatus.FINAL
     return GameStatus.SCHEDULED
 
-def _parse_competition(competition: dict, sport: Sport) -> Optional[Game]:
+def _parse_competition(competition: dict, sport: Sport, regular_periods: int) -> Optional[Game]:
     try:
         competitors = competition.get("competitors", [])
         if len(competitors) < 2:
@@ -70,7 +69,7 @@ def _parse_competition(competition: dict, sport: Sport) -> Optional[Game]:
         )
 
         status = _parse_game_status(competition)
-        clock = _parse_clock(competition, sport) if status == GameStatus.IN_PROGRESS else None
+        clock = _parse_clock(competition, regular_periods) if status == GameStatus.IN_PROGRESS else None
 
         # Parse start time
         start_time = None
@@ -105,6 +104,9 @@ async def fetch_games(sport: Sport = Sport.NBA) -> list[Game]:
     if not url:
         return []
 
+    sport_config = await get_sport_config(sport)
+    regular_periods = sport_config.regular_periods
+
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
             response = await client.get(url)
@@ -117,7 +119,7 @@ async def fetch_games(sport: Sport = Sport.NBA) -> list[Game]:
     games = []
     for event in data.get("events", []):
         for competition in event.get("competitions", []):
-            game = _parse_competition(competition, sport)
+            game = _parse_competition(competition, sport, regular_periods)
             if game:
                 games.append(game)
 

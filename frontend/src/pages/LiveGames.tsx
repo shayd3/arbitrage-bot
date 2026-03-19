@@ -182,13 +182,14 @@ const SPORT_SERIES_TICKERS: Record<string, string> = {
 }
 
 function matchMarketsForGame(game: Game, markets: KalshiMarket[]): KalshiMarket[] {
-  const sport = game.sport.toUpperCase()
-  const homeAbbr = toKalshiAbbr(game.home_team.abbreviation)
-  const awayAbbr = toKalshiAbbr(game.away_team.abbreviation)
+  const sport = game.sport
+  const sportUpper = sport.toUpperCase()
+  const homeAbbr = toKalshiAbbr(game.home_team.abbreviation, sport)
+  const awayAbbr = toKalshiAbbr(game.away_team.abbreviation, sport)
   return markets.filter(m => {
     if (m.status !== 'open' && m.status !== 'active') return false
     const ticker = m.ticker.toUpperCase()
-    if (!ticker.includes(sport)) return false
+    if (!ticker.includes(sportUpper)) return false
     // Both teams must appear in the ticker (KXNBAGAME format: OKCORL)
     return ticker.includes(homeAbbr) && ticker.includes(awayAbbr)
   })

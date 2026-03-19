@@ -93,9 +93,9 @@ function computeOutcomePnL(trade: Trade, game: Game): number | null {
   const yesTeam = parts[parts.length - 1].toUpperCase()
 
   let yesTeamWon: boolean
-  if (yesTeam === toKalshiAbbr(game.home_team.abbreviation)) {
+  if (yesTeam === toKalshiAbbr(game.home_team.abbreviation, game.sport)) {
     yesTeamWon = game.home_team.score > game.away_team.score
-  } else if (yesTeam === toKalshiAbbr(game.away_team.abbreviation)) {
+  } else if (yesTeam === toKalshiAbbr(game.away_team.abbreviation, game.sport)) {
     yesTeamWon = game.away_team.score > game.home_team.score
   } else {
     return null
