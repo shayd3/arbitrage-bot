@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchStrategy, updateGlobal, updateSport, formatWindow, modeColor, type SportConfig, type GlobalConfig } from '../api/strategy'
+import { fetchStrategy, updateGlobal, updateSport, formatWindow, type SportConfig, type GlobalConfig } from '../api/strategy'
 import { useGlobalConfigEditor, useSportConfigEditor } from '../hooks/useStrategyEditors'
 
 function StatCard({ label, value }: { label: string; value: string }) {
@@ -166,7 +166,7 @@ export default function Settings() {
     return <div className="text-gray-500 text-sm">Loading strategy...</div>
   }
 
-  const { global: g, mode, sports } = data
+  const { global: g, demo, sports } = data
 
   return (
     <div className="space-y-8">
@@ -182,8 +182,8 @@ export default function Settings() {
           <StatCard label="Max Positions" value={String(g.max_open_positions)} />
           <StatCard label="Max Daily Loss" value={`$${g.max_daily_loss}`} />
           <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
-            <div className="text-xs text-gray-500 mb-1">Mode</div>
-            <div className={`text-xl font-bold uppercase ${modeColor(mode)}`}>{mode}</div>
+            <div className="text-xs text-gray-500 mb-1">Env</div>
+            <div className={`text-xl font-bold uppercase ${demo ? 'text-yellow-400' : 'text-green-400'}`}>{demo ? 'demo' : 'live'}</div>
           </div>
         </div>
       </div>

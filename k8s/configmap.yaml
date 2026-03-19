@@ -5,6 +5,5 @@ metadata:
   namespace: arbitrage-bot
 data:
   KALSHI_USE_DEMO: "true"
-  BOT_MODE: "simulation"
   DATABASE_PATH: "/data/arbitrage.db"
   KALSHI_PRIVATE_KEY_PATH: "/secrets/kalshi_private_key.pem"

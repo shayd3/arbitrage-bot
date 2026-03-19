@@ -66,9 +66,7 @@ class LateGameStrategy(Strategy):
 
         # Size position to 20% of available balance
         from backend.execution.risk import get_max_position_dollars
-        from backend.config import settings, BotMode
-        is_simulated = settings.bot_mode != BotMode.LIVE
-        max_dollars = await get_max_position_dollars(is_simulated=is_simulated)
+        max_dollars = await get_max_position_dollars()
         contracts = self._size_position(price, max_dollars)
 
         reason = (

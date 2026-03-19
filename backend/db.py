@@ -28,7 +28,6 @@ CREATE TABLE IF NOT EXISTS trades (
     contracts INTEGER NOT NULL,
     price INTEGER NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
-    is_simulated INTEGER NOT NULL DEFAULT 1,
     pnl REAL,
     created_at TEXT NOT NULL,
     settled_at TEXT,
@@ -40,8 +39,7 @@ CREATE TABLE IF NOT EXISTS balances (
     timestamp TEXT NOT NULL,
     available REAL NOT NULL,
     portfolio_value REAL NOT NULL,
-    total REAL NOT NULL,
-    is_simulated INTEGER NOT NULL DEFAULT 1
+    total REAL NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS game_snapshots (
@@ -88,51 +86,47 @@ async def close_db():
 async def insert_trade(trade: Trade) -> int:
     db = await get_db()
     cursor = await db.execute(
-        """INSERT INTO trades (kalshi_order_id, ticker, side, contracts, price, status, is_simulated, pnl, created_at, game_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        """INSERT INTO trades (kalshi_order_id, ticker, side, contracts, price, status, pnl, created_at, game_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (trade.kalshi_order_id, trade.ticker, trade.side.value, trade.contracts,
-         trade.price, trade.status.value, int(trade.is_simulated), trade.pnl,
+         trade.price, trade.status.value, trade.pnl,
          (trade.created_at or datetime.utcnow()).isoformat(), trade.game_id)
     )
     await db.commit()
     return cursor.lastrowid
 
-async def get_trades(limit: int = 100, is_simulated: bool | None = None) -> list[dict]:
+async def get_trades(limit: int = 100) -> list[dict]:
     db = await get_db()
-    if is_simulated is None:
-        cursor = await db.execute("SELECT * FROM trades ORDER BY created_at DESC LIMIT ?", (limit,))
-    else:
-        cursor = await db.execute(
-            "SELECT * FROM trades WHERE is_simulated = ? ORDER BY created_at DESC LIMIT ?",
-            (int(is_simulated), limit)
-        )
+    # Filter out legacy simulated rows (pre-migration rows with no real Kalshi order ID)
+    cursor = await db.execute(
+        "SELECT * FROM trades WHERE kalshi_order_id IS NOT NULL ORDER BY created_at DESC LIMIT ?",
+        (limit,)
+    )
     rows = await cursor.fetchall()
     return [dict(r) for r in rows]
 
 async def insert_balance(balance: Balance):
     db = await get_db()
     await db.execute(
-        """INSERT INTO balances (timestamp, available, portfolio_value, total, is_simulated)
-           VALUES (?, ?, ?, ?, ?)""",
-        (balance.timestamp.isoformat(), balance.available, balance.portfolio_value,
-         balance.total, int(balance.is_simulated))
+        """INSERT INTO balances (timestamp, available, portfolio_value, total)
+           VALUES (?, ?, ?, ?)""",
+        (balance.timestamp.isoformat(), balance.available, balance.portfolio_value, balance.total)
     )
     await db.commit()
 
-async def get_latest_balance(is_simulated: bool = True) -> dict | None:
+async def get_latest_balance() -> dict | None:
     db = await get_db()
     cursor = await db.execute(
-        "SELECT * FROM balances WHERE is_simulated = ? ORDER BY timestamp DESC LIMIT 1",
-        (int(is_simulated),)
+        "SELECT * FROM balances ORDER BY timestamp DESC LIMIT 1"
     )
     row = await cursor.fetchone()
     return dict(row) if row else None
 
-async def get_balance_history(is_simulated: bool = True, limit: int = 100) -> list[dict]:
+async def get_balance_history(limit: int = 100) -> list[dict]:
     db = await get_db()
     cursor = await db.execute(
-        "SELECT * FROM balances WHERE is_simulated = ? ORDER BY timestamp DESC LIMIT ?",
-        (int(is_simulated), limit)
+        "SELECT * FROM balances ORDER BY timestamp DESC LIMIT ?",
+        (limit,)
     )
     rows = await cursor.fetchall()
     return [dict(r) for r in rows]

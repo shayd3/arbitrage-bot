@@ -15,7 +15,7 @@ export interface GlobalConfig {
 
 export interface StrategyData {
   global: GlobalConfig
-  mode: string
+  demo: boolean
   sports: SportConfig[]
 }
 
@@ -58,10 +58,4 @@ export function formatWindow(sport: string, seconds: number): string {
   return secs > 0
     ? `${mins}:${String(secs).padStart(2, '0')} remaining`
     : `${mins}:00 remaining`
-}
-
-export function modeColor(mode: string): string {
-  if (mode === 'live') return 'text-green-400'
-  if (mode === 'simulation') return 'text-yellow-400'
-  return 'text-gray-400'
 }

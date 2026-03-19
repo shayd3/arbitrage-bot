@@ -70,7 +70,6 @@ class Trade(BaseModel):
     contracts: int
     price: int  # cents paid
     status: TradeStatus = TradeStatus.PENDING
-    is_simulated: bool = True
     pnl: Optional[float] = None
     created_at: Optional[datetime] = None
     settled_at: Optional[datetime] = None
@@ -81,4 +80,3 @@ class Balance(BaseModel):
     available: float  # dollars
     portfolio_value: float
     total: float
-    is_simulated: bool = True

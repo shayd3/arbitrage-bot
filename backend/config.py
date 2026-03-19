@@ -1,11 +1,4 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
-from enum import Enum
-
-class BotMode(str, Enum):
-    DRY_RUN = "dry-run"
-    SIMULATION = "simulation"
-    LIVE = "live"
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -16,7 +9,6 @@ class Settings(BaseSettings):
     kalshi_use_demo: bool = True
 
     # Bot
-    bot_mode: BotMode = BotMode.SIMULATION
     database_path: str = "./arbitrage.db"
 
     # Scanner
