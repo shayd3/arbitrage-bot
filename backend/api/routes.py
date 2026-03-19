@@ -1,11 +1,14 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
+import logging
 from pydantic import BaseModel
 from backend.clients.espn import fetch_all_games, fetch_games
 from backend.clients.kalshi import kalshi_client
 from backend.db import get_trades, get_latest_balance, get_balance_history, get_config_override, set_config_override
 from backend.models import Sport
 from backend.config import settings
+
+logger = logging.getLogger(__name__)
 
 class SportStrategyBody(BaseModel):
     min_lead: Optional[int] = None
@@ -57,7 +60,21 @@ async def get_balance():
     try:
         cents = await kalshi_client.get_balance()
         available = int(cents) / 100
-        return {"available": available, "portfolio_value": 0, "total": available}
+        portfolio_value = 0.0
+        positions_error = None
+        try:
+            positions = await kalshi_client.get_positions()
+            portfolio_value = sum(
+                float(p.get("market_exposure_dollars", 0) or 0)
+                for p in positions
+            )
+        except Exception as pe:
+            logger.warning("Failed to fetch positions for balance: %s", pe)
+            positions_error = str(pe)
+        result = {"available": available, "portfolio_value": portfolio_value, "total": available + portfolio_value}
+        if positions_error:
+            result["positions_error"] = positions_error
+        return result
     except Exception as e:
         # Surface auth/network errors so the UI can show them
         is_simulated = settings.bot_mode.value != "live"
@@ -81,6 +98,14 @@ async def get_balance_history_endpoint(limit: int = 100):
 async def get_trades_endpoint(limit: int = 100, simulated: Optional[bool] = None):
     trades = await get_trades(limit=limit, is_simulated=simulated)
     return {"trades": trades}
+
+@router.get("/positions")
+async def get_positions():
+    try:
+        positions = await kalshi_client.get_positions()
+        return {"positions": positions}
+    except Exception as e:
+        return {"positions": [], "error": str(e)}
 
 @router.get("/scanner/status")
 async def get_scanner_status():

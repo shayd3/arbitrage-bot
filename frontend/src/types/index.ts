@@ -51,6 +51,15 @@ export interface Trade {
   game_id: string | null
 }
 
+export interface KalshiPosition {
+  ticker: string
+  position_fp: string
+  market_exposure_dollars: string
+  total_traded_dollars: string
+  realized_pnl_dollars: string
+  fees_paid_dollars: string
+}
+
 export interface Balance {
   id?: number
   timestamp?: string

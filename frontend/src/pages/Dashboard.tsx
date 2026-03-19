@@ -40,7 +40,7 @@ export default function Dashboard() {
         />
         <StatCard
           label="Portfolio Value"
-          value={`$${(balance?.portfolio_value ?? 0).toFixed(2)}`}
+          value={`$${(balance?.total ?? 0).toFixed(2)}`}
         />
         <StatCard
           label="Total P&L"
