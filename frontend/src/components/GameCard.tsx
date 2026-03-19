@@ -1,4 +1,5 @@
 import type { Game, KalshiMarket, Trade, KalshiPosition } from '../types'
+import { toKalshiAbbr } from '../utils/teams'
 
 interface Props {
   game: Game
@@ -90,13 +91,11 @@ function computeOutcomePnL(trade: Trade, game: Game): number | null {
   // Extract YES team abbreviation from ticker: "KXNBAGAME-26MAR18GSWBOS-BOS" → "BOS"
   const parts = trade.ticker.split('-')
   const yesTeam = parts[parts.length - 1].toUpperCase()
-  const home = game.home_team.abbreviation.toUpperCase()
-  const away = game.away_team.abbreviation.toUpperCase()
 
   let yesTeamWon: boolean
-  if (yesTeam === home || home.includes(yesTeam) || yesTeam.includes(home)) {
+  if (yesTeam === toKalshiAbbr(game.home_team.abbreviation)) {
     yesTeamWon = game.home_team.score > game.away_team.score
-  } else if (yesTeam === away || away.includes(yesTeam) || yesTeam.includes(away)) {
+  } else if (yesTeam === toKalshiAbbr(game.away_team.abbreviation)) {
     yesTeamWon = game.away_team.score > game.home_team.score
   } else {
     return null
@@ -117,7 +116,7 @@ function computePnL(trade: Trade, game: Game, markets: KalshiMarket[], position?
   if (position?.market_exposure_dollars != null && position?.total_traded_dollars != null) {
     const marketValue = parseFloat(position.market_exposure_dollars)
     const cost = parseFloat(position.total_traded_dollars)
-    if (!isNaN(marketValue) && !isNaN(cost) && marketValue !== cost) return marketValue - cost
+    if (!isNaN(marketValue) && !isNaN(cost)) return marketValue - cost
   }
   const market = markets.find(m => m.ticker === trade.ticker)
   if (!market) return null
