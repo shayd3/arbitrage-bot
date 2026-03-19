@@ -97,7 +97,11 @@ async def insert_trade(trade: Trade) -> int:
 
 async def get_trades(limit: int = 100) -> list[dict]:
     db = await get_db()
-    cursor = await db.execute("SELECT * FROM trades ORDER BY created_at DESC LIMIT ?", (limit,))
+    # Filter out legacy simulated rows (pre-migration rows with no real Kalshi order ID)
+    cursor = await db.execute(
+        "SELECT * FROM trades WHERE kalshi_order_id IS NOT NULL ORDER BY created_at DESC LIMIT ?",
+        (limit,)
+    )
     rows = await cursor.fetchall()
     return [dict(r) for r in rows]
 
