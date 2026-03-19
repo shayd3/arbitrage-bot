@@ -168,6 +168,8 @@ const TABS = [
   { id: 'nfl', label: 'NFL' },
   { id: 'mlb', label: 'MLB' },
   { id: 'nhl', label: 'NHL' },
+  { id: 'wnba', label: 'WNBA' },
+  { id: 'cbb', label: 'CBB' },
 ]
 
 const SPORT_SERIES_TICKERS: Record<string, string> = {
@@ -175,6 +177,8 @@ const SPORT_SERIES_TICKERS: Record<string, string> = {
   nfl: 'KXNFLGAME',
   mlb: 'KXMLBGAME',
   nhl: 'KXNHLGAME',
+  wnba: 'KXWNBAGAME',
+  cbb: 'KXCBBGAME',
 }
 
 function matchMarketsForGame(game: Game, markets: KalshiMarket[]): KalshiMarket[] {

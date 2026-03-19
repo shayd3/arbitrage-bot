@@ -1,9 +1,9 @@
 import httpx
-import asyncio
 import logging
 from datetime import datetime
 from typing import Optional
 from backend.models import Game, Team, GameClock, GameStatus, Sport
+from backend.scanner.sports import SPORT_CONFIGS
 
 logger = logging.getLogger(__name__)
 
@@ -12,14 +12,16 @@ ESPN_ENDPOINTS = {
     Sport.NFL: "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
     Sport.MLB: "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard",
     Sport.NHL: "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard",
+    Sport.WNBA: "https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/scoreboard",
+    Sport.CBB: "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard",
 }
 
-def _parse_clock(competition: dict) -> Optional[GameClock]:
+def _parse_clock(competition: dict, sport: Sport) -> Optional[GameClock]:
     status = competition.get("status", {})
-    status_type = status.get("type", {})
     period = status.get("period", 0)
     display_clock = status.get("displayClock", "0:00")
-    period_type = "overtime" if period > 4 else "regular"  # NBA-specific, adjust per sport
+    regular_periods = SPORT_CONFIGS[sport].regular_periods
+    period_type = "overtime" if period > regular_periods else "regular"
 
     # Parse seconds remaining from display clock
     seconds = None
@@ -68,7 +70,7 @@ def _parse_competition(competition: dict, sport: Sport) -> Optional[Game]:
         )
 
         status = _parse_game_status(competition)
-        clock = _parse_clock(competition) if status == GameStatus.IN_PROGRESS else None
+        clock = _parse_clock(competition, sport) if status == GameStatus.IN_PROGRESS else None
 
         # Parse start time
         start_time = None
@@ -121,12 +123,3 @@ async def fetch_games(sport: Sport = Sport.NBA) -> list[Game]:
 
     return games
 
-async def fetch_all_games() -> list[Game]:
-    """Fetch games for all supported sports concurrently."""
-    tasks = [fetch_games(sport) for sport in [Sport.NBA]]  # Start with NBA only
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    games = []
-    for result in results:
-        if isinstance(result, list):
-            games.extend(result)
-    return games

@@ -7,6 +7,8 @@ SPORT_SERIES_TICKER: dict[Sport, str] = {
     Sport.NFL: "KXNFLGAME",
     Sport.NHL: "KXNHLGAME",
     Sport.MLB: "KXMLBGAME",
+    Sport.WNBA: "KXWNBAGAME",
+    Sport.CBB: "KXCBBGAME",
 }
 
 @dataclass
@@ -17,6 +19,8 @@ class SportConfig:
     min_lead: int              # Points/goals/runs required
     min_yes_price: int         # Minimum YES price in cents
     poll_interval: float       # ESPN poll interval in seconds
+    regular_periods: int = 4   # Periods before overtime
+    clock_based: bool = True   # False for MLB (innings, no game clock)
 
 SPORT_CONFIGS: dict[Sport, SportConfig] = {
     Sport.NBA: SportConfig(
@@ -26,6 +30,8 @@ SPORT_CONFIGS: dict[Sport, SportConfig] = {
         min_lead=15,
         min_yes_price=88,
         poll_interval=10.0,
+        regular_periods=4,
+        clock_based=True,
     ),
     Sport.NFL: SportConfig(
         sport=Sport.NFL,
@@ -34,6 +40,8 @@ SPORT_CONFIGS: dict[Sport, SportConfig] = {
         min_lead=14,
         min_yes_price=88,
         poll_interval=30.0,
+        regular_periods=4,
+        clock_based=True,
     ),
     Sport.NHL: SportConfig(
         sport=Sport.NHL,
@@ -42,6 +50,8 @@ SPORT_CONFIGS: dict[Sport, SportConfig] = {
         min_lead=3,
         min_yes_price=88,
         poll_interval=15.0,
+        regular_periods=3,
+        clock_based=True,
     ),
     Sport.MLB: SportConfig(
         sport=Sport.MLB,
@@ -50,6 +60,28 @@ SPORT_CONFIGS: dict[Sport, SportConfig] = {
         min_lead=5,
         min_yes_price=88,
         poll_interval=20.0,
+        regular_periods=9,
+        clock_based=False,
+    ),
+    Sport.WNBA: SportConfig(
+        sport=Sport.WNBA,
+        final_period=4,
+        final_period_window=300.0,  # 5 minutes
+        min_lead=15,
+        min_yes_price=88,
+        poll_interval=10.0,
+        regular_periods=4,
+        clock_based=True,
+    ),
+    Sport.CBB: SportConfig(
+        sport=Sport.CBB,
+        final_period=2,
+        final_period_window=300.0,  # 5 minutes
+        min_lead=15,
+        min_yes_price=88,
+        poll_interval=10.0,
+        regular_periods=2,
+        clock_based=True,
     ),
 }
 
@@ -75,6 +107,8 @@ async def get_sport_config(sport: Sport) -> SportConfig:
                 min_lead=overrides.get("min_lead", config.min_lead),
                 min_yes_price=overrides.get("min_yes_price", config.min_yes_price),
                 poll_interval=overrides.get("poll_interval", config.poll_interval),
+                regular_periods=overrides.get("regular_periods", config.regular_periods),
+                clock_based=overrides.get("clock_based", config.clock_based),
             )
         except (json.JSONDecodeError, KeyError):
             pass

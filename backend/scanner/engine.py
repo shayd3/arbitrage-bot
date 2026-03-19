@@ -257,13 +257,17 @@ class ScannerEngine:
             return
 
         clock = game.clock
-        is_final_period = clock.period == config.final_period
-        in_time_window = (
-            clock.seconds_remaining is not None
-            and clock.seconds_remaining <= config.final_period_window
-        )
+        is_late_game = clock.period >= config.final_period  # >= handles overtime
 
-        if not (is_final_period and in_time_window):
+        if config.clock_based:
+            in_time_window = (
+                clock.seconds_remaining is not None
+                and clock.seconds_remaining <= config.final_period_window
+            )
+        else:
+            in_time_window = True  # MLB: any at-bat in 9th+ qualifies
+
+        if not (is_late_game and in_time_window):
             return
 
         lead = abs(game.home_team.score - game.away_team.score)
