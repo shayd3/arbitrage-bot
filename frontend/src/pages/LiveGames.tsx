@@ -5,6 +5,7 @@ import GameCard from '../components/GameCard'
 import type { Game, KalshiMarket, Trade } from '../types'
 import { fetchStrategy, updateGlobal, updateSport, formatWindow, modeColor, type SportConfig, type GlobalConfig } from '../api/strategy'
 import { useGlobalConfigEditor, useSportConfigEditor } from '../hooks/useStrategyEditors'
+import { toKalshiAbbr } from '../utils/teams'
 
 // ─── Shared primitives ────────────────────────────────────────────────────────
 
@@ -176,16 +177,6 @@ const SPORT_SERIES_TICKERS: Record<string, string> = {
   nhl: 'KXNHLGAME',
 }
 
-// ESPN abbreviation → Kalshi abbreviation overrides (where they differ)
-const ESPN_TO_KALSHI: Record<string, string> = {
-  WSH: 'WAS', SA: 'SAS', NY: 'NYK', GS: 'GSW', NO: 'NOP',
-}
-
-function toKalshiAbbr(espnAbbr: string): string {
-  const upper = espnAbbr.toUpperCase()
-  return ESPN_TO_KALSHI[upper] ?? upper
-}
-
 function matchMarketsForGame(game: Game, markets: KalshiMarket[]): KalshiMarket[] {
   const sport = game.sport.toUpperCase()
   const homeAbbr = toKalshiAbbr(game.home_team.abbreviation)
@@ -214,7 +205,7 @@ export default function LiveGames() {
   const { data: gamesData, isLoading: gamesLoading } = useGames(activeTab)
   const { data: marketsData } = useMarkets(SPORT_SERIES_TICKERS[activeTab])
   const { data: tradesData } = useTrades(strategy != null ? strategy.mode === 'simulation' : undefined)
-  const { data: positionsData } = usePositions()
+  const { data: positionsData } = usePositions(strategy != null ? strategy.mode === 'simulation' : undefined)
 
   const positionsByTicker = new Map(
     (positionsData?.positions ?? []).map(p => [p.ticker, p])

@@ -44,11 +44,12 @@ export function useTrades(simulated?: boolean) {
   })
 }
 
-export function usePositions() {
+export function usePositions(simulated?: boolean) {
   return useQuery({
-    queryKey: ['positions'],
+    queryKey: ['positions', simulated],
     queryFn: () => fetchJson<{ positions: KalshiPosition[] }>(`${API_BASE}/positions`),
     refetchInterval: 15000,
+    enabled: simulated !== true,
   })
 }
 
