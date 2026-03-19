@@ -37,8 +37,8 @@ function ClockBadge({ game }: { game: Game }) {
 }
 
 function MarketRow({ market }: { market: KalshiMarket }) {
-  // Shorten ticker for display: "KXNBA-LAL-20250317" → "LAL-20250317"
-  const shortTicker = market.ticker.replace(/^KX(NBA|NFL|MLB|NHL)-?/i, '')
+  // Shorten ticker for display: "KXNBAGAME-26MAR17OKCORL-OKC" → "26MAR17OKCORL-OKC"
+  const shortTicker = market.ticker.replace(/^KX(NBA|NFL|MLB|NHL)(GAME)?-?/i, '')
 
   return (
     <div className="bg-gray-800/60 rounded-lg px-3 py-2 space-y-1.5">

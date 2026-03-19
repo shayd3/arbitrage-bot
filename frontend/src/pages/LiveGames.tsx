@@ -169,6 +169,13 @@ const TABS = [
   { id: 'nhl', label: 'NHL' },
 ]
 
+const SPORT_SERIES_TICKERS: Record<string, string> = {
+  nba: 'KXNBAGAME',
+  nfl: 'KXNFLGAME',
+  mlb: 'KXMLBGAME',
+  nhl: 'KXNHLGAME',
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function LiveGames() {
@@ -182,7 +189,7 @@ export default function LiveGames() {
   })
 
   const { data: gamesData, isLoading: gamesLoading } = useGames(activeTab)
-  const { data: marketsData } = useMarkets()
+  const { data: marketsData } = useMarkets(SPORT_SERIES_TICKERS[activeTab])
 
   const globalMutation = useMutation({
     mutationFn: updateGlobal,

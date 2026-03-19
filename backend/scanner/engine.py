@@ -9,7 +9,8 @@ from backend.scanner.sports import get_sport_config, SPORT_SERIES_TICKER
 from backend.db import log_scanner, insert_balance
 from backend.config import settings, BotMode
 from backend.api.websocket import manager
-from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 async def sync_live_balance():
     """Fetch real Kalshi balance and store in DB so risk checks have current data."""
@@ -26,8 +27,6 @@ async def sync_live_balance():
         logger.info(f"Synced live balance: ${available:.2f}")
     except Exception as e:
         logger.warning(f"Failed to sync live balance: {e}")
-
-logger = logging.getLogger(__name__)
 
 class ScannerEngine:
     def __init__(self):

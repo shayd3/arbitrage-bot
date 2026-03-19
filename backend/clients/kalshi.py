@@ -109,10 +109,10 @@ class KalshiClient:
         response.raise_for_status()
         return response.json()
 
-    async def get_balance(self) -> dict:
+    async def get_balance(self) -> int:
         """Returns available balance in cents."""
         data = await self._request("GET", "/portfolio/balance")
-        return data.get("balance", {})
+        return int(data.get("balance", 0))
 
     async def get_markets(self, status: str = "open", limit: int = 100, cursor: str = "", series_ticker: str = "") -> list[KalshiMarket]:
         """Fetch open markets, optionally filtered."""
