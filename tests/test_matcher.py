@@ -141,6 +141,45 @@ class TestMatchGameToMarkets:
         result = match_game_to_markets(game, markets)
         assert result == []
 
+    def test_only_one_team_in_ticker_excluded(self):
+        """New AND logic: both teams must appear — one-team match is no longer sufficient."""
+        game = make_game()  # LAL @ BOS
+        # Ticker has LAL but not BOS — should not match
+        markets = [make_market("KXNBAGAME-26MAR17LALCHI-LAL")]
+        result = match_game_to_markets(game, markets)
+        assert result == []
+
+    def test_active_status_accepted(self):
+        """Kalshi returns status='active' for open markets, not 'open'."""
+        game = make_game()
+        markets = [make_market("KXNBA-LAL-BOS-20260317", status="active")]
+        result = match_game_to_markets(game, markets)
+        assert len(result) == 1
+
+    def test_kxnbagame_format_both_markets_matched(self):
+        """KXNBAGAME-{DATE}{AWAY}{HOME}-{WINNER} — both team outcome markets match."""
+        game = make_game(
+            home_name="Orlando Magic", home_abbrev="ORL",
+            away_name="Oklahoma City Thunder", away_abbrev="OKC",
+        )
+        markets = [
+            make_market("KXNBAGAME-26MAR17OKCORL-OKC", status="active"),
+            make_market("KXNBAGAME-26MAR17OKCORL-ORL", status="active"),
+            make_market("KXNBAGAME-26MAR17MIACHA-MIA", status="active"),  # different game
+        ]
+        result = match_game_to_markets(game, markets)
+        assert len(result) == 2
+        tickers = {m.ticker for m in result}
+        assert "KXNBAGAME-26MAR17OKCORL-OKC" in tickers
+        assert "KXNBAGAME-26MAR17OKCORL-ORL" in tickers
+
+    def test_kxnbagame_prefix_recognised(self):
+        """KXNBAGAME prefix is in the sport prefix list for NBA."""
+        game = make_game()
+        markets = [make_market("KXNBAGAME-26MAR17LALBOS-LAL", status="active")]
+        result = match_game_to_markets(game, markets)
+        assert len(result) == 1
+
 
 # ---------------------------------------------------------------------------
 # GameMarketMatch

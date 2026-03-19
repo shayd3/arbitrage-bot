@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 from backend.models import Sport
-from backend.scanner.sports import get_sport_config, SPORT_CONFIGS, SportConfig
+from backend.scanner.sports import get_sport_config, SPORT_CONFIGS, SPORT_SERIES_TICKER, SportConfig
 
 
 class TestSportConfigDefaults:
@@ -71,3 +71,21 @@ class TestSportConfigOverrides:
             with patch("backend.db.get_config_override", new=mock):
                 await get_sport_config(sport)
             mock.assert_called_once_with(expected_key)
+
+
+class TestSportSeriesTicker:
+    def test_all_sports_have_series_ticker(self):
+        for sport in Sport:
+            assert sport in SPORT_SERIES_TICKER, f"Missing series ticker for {sport}"
+
+    def test_nba_series_ticker(self):
+        assert SPORT_SERIES_TICKER[Sport.NBA] == "KXNBAGAME"
+
+    def test_nfl_series_ticker(self):
+        assert SPORT_SERIES_TICKER[Sport.NFL] == "KXNFLGAME"
+
+    def test_nhl_series_ticker(self):
+        assert SPORT_SERIES_TICKER[Sport.NHL] == "KXNHLGAME"
+
+    def test_mlb_series_ticker(self):
+        assert SPORT_SERIES_TICKER[Sport.MLB] == "KXMLBGAME"

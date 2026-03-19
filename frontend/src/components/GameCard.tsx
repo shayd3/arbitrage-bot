@@ -2,7 +2,7 @@ import type { Game, KalshiMarket } from '../types'
 
 interface Props {
   game: Game
-  market?: KalshiMarket
+  markets: KalshiMarket[]
 }
 
 function ScoreBadge({ score, isLeading }: { score: number; isLeading: boolean }) {
@@ -36,7 +36,54 @@ function ClockBadge({ game }: { game: Game }) {
   return null
 }
 
-export default function GameCard({ game, market }: Props) {
+function MarketRow({ market }: { market: KalshiMarket }) {
+  // Shorten ticker for display: "KXNBAGAME-26MAR17OKCORL-OKC" → "26MAR17OKCORL-OKC"
+  const shortTicker = market.ticker.replace(/^KX(NBA|NFL|MLB|NHL)(GAME)?-?/i, '')
+
+  return (
+    <div className="bg-gray-800/60 rounded-lg px-3 py-2 space-y-1.5">
+      <div className="text-xs text-gray-400 font-mono truncate" title={market.ticker}>
+        {shortTicker}
+      </div>
+      <div className="flex items-center gap-3">
+        {market.yes_ask != null && (
+          <div className="flex flex-col items-center">
+            <span className="text-[10px] text-gray-500 uppercase">YES ask</span>
+            <span className="text-sm font-semibold text-green-400">{market.yes_ask}¢</span>
+          </div>
+        )}
+        {market.no_ask != null && (
+          <div className="flex flex-col items-center">
+            <span className="text-[10px] text-gray-500 uppercase">NO ask</span>
+            <span className="text-sm font-semibold text-red-400">{market.no_ask}¢</span>
+          </div>
+        )}
+        {market.yes_bid != null && (
+          <div className="flex flex-col items-center">
+            <span className="text-[10px] text-gray-500 uppercase">YES bid</span>
+            <span className="text-sm font-semibold text-green-600">{market.yes_bid}¢</span>
+          </div>
+        )}
+        <div className="ml-auto flex gap-3">
+          {market.volume != null && (
+            <div className="flex flex-col items-center">
+              <span className="text-[10px] text-gray-500 uppercase">Vol</span>
+              <span className="text-xs text-gray-300">{market.volume.toLocaleString()}</span>
+            </div>
+          )}
+          {market.open_interest != null && (
+            <div className="flex flex-col items-center">
+              <span className="text-[10px] text-gray-500 uppercase">OI</span>
+              <span className="text-xs text-gray-300">{market.open_interest.toLocaleString()}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function GameCard({ game, markets }: Props) {
   const homeLeading = game.home_team.score > game.away_team.score
   const awayLeading = game.away_team.score > game.home_team.score
 
@@ -59,17 +106,17 @@ export default function GameCard({ game, market }: Props) {
         </div>
       </div>
 
-      {market && (
+      {markets.length > 0 && (
+        <div className="border-t border-gray-800 pt-3 space-y-2">
+          {markets.map(m => (
+            <MarketRow key={m.ticker} market={m} />
+          ))}
+        </div>
+      )}
+
+      {markets.length === 0 && game.status === 'in_progress' && (
         <div className="border-t border-gray-800 pt-3">
-          <div className="text-xs text-gray-500 mb-1 truncate">{market.ticker}</div>
-          <div className="flex gap-3 text-xs">
-            {market.yes_bid != null && (
-              <span className="text-green-400">YES bid: {market.yes_bid}¢</span>
-            )}
-            {market.yes_ask != null && (
-              <span className="text-red-400">YES ask: {market.yes_ask}¢</span>
-            )}
-          </div>
+          <p className="text-xs text-gray-600 italic">No open Kalshi markets found</p>
         </div>
       )}
     </div>

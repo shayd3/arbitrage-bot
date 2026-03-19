@@ -3,21 +3,37 @@ import logging
 from datetime import datetime
 from backend.clients.espn import fetch_all_games
 from backend.clients.kalshi import kalshi_client
-from backend.models import Game, GameStatus, Sport
+from backend.models import Game, GameStatus, Sport, Balance
 from backend.scanner.matcher import match_game_to_markets
-from backend.scanner.sports import get_sport_config
-from backend.db import log_scanner
-from backend.config import settings
+from backend.scanner.sports import get_sport_config, SPORT_SERIES_TICKER
+from backend.db import log_scanner, insert_balance
+from backend.config import settings, BotMode
 from backend.api.websocket import manager
 
 logger = logging.getLogger(__name__)
+
+async def sync_live_balance():
+    """Fetch real Kalshi balance and store in DB so risk checks have current data."""
+    try:
+        cents = await kalshi_client.get_balance()
+        available = int(cents) / 100
+        await insert_balance(Balance(
+            timestamp=datetime.utcnow(),
+            available=available,
+            portfolio_value=0.0,
+            total=available,
+            is_simulated=False,
+        ))
+        logger.info(f"Synced live balance: ${available:.2f}")
+    except Exception as e:
+        logger.warning(f"Failed to sync live balance: {e}")
 
 class ScannerEngine:
     def __init__(self):
         self._running = False
         self._task: asyncio.Task | None = None
         self._games: list[Game] = []
-        self._markets: list = []
+        self._markets: dict[Sport, list] = {}  # per-sport game winner markets
 
     async def start(self):
         if self._running:
@@ -48,6 +64,10 @@ class ScannerEngine:
             await asyncio.sleep(settings.espn_poll_interval)
 
     async def _scan(self):
+        # Keep live balance in sync so risk checks have current data
+        if settings.bot_mode == BotMode.LIVE:
+            await sync_live_balance()
+
         # Fetch live games
         games = await fetch_all_games()
         self._games = games
@@ -57,12 +77,19 @@ class ScannerEngine:
         if not in_progress:
             return
 
-        # Fetch markets (less frequently, cache between cycles)
-        try:
-            self._markets = await kalshi_client.get_markets(status="open", limit=200)
-        except Exception as e:
-            logger.warning(f"Failed to fetch markets: {e}")
-            # Continue with cached markets
+        # Fetch game winner markets per sport in play
+        sports_in_play = {g.sport for g in in_progress}
+        for sport in sports_in_play:
+            series_ticker = SPORT_SERIES_TICKER.get(sport)
+            if not series_ticker:
+                continue
+            try:
+                self._markets[sport] = await kalshi_client.get_markets(
+                    status="open", limit=100, series_ticker=series_ticker
+                )
+            except Exception as e:
+                logger.warning(f"Failed to fetch {sport} markets: {e}")
+                # Continue with cached markets
 
         for game in in_progress:
             await self._process_game(game)
@@ -95,7 +122,8 @@ class ScannerEngine:
             return
 
         # Find matching Kalshi markets
-        matches = match_game_to_markets(game, self._markets)
+        sport_markets = self._markets.get(game.sport, [])
+        matches = match_game_to_markets(game, sport_markets)
         if not matches:
             return
 

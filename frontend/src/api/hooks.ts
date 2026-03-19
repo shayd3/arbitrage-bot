@@ -19,10 +19,14 @@ export function useGames(sport?: string) {
   })
 }
 
-export function useMarkets() {
+export function useMarkets(seriesTicker?: string) {
   return useQuery({
-    queryKey: ['markets'],
-    queryFn: () => fetchJson<{ markets: KalshiMarket[] }>(`${API_BASE}/markets`),
+    queryKey: ['markets', seriesTicker],
+    queryFn: () => {
+      const params = new URLSearchParams({ limit: '100' })
+      if (seriesTicker) params.set('series_ticker', seriesTicker)
+      return fetchJson<{ markets: KalshiMarket[] }>(`${API_BASE}/markets?${params}`)
+    },
     refetchInterval: 15000,
   })
 }

@@ -37,9 +37,9 @@ async def get_games(sport: Optional[str] = Query(None)):
     return {"games": [g.model_dump(mode="json") for g in games]}
 
 @router.get("/markets")
-async def get_markets(status: str = "open", limit: int = 50):
+async def get_markets(status: str = "open", limit: int = 50, series_ticker: str = ""):
     try:
-        markets = await kalshi_client.get_markets(status=status, limit=limit)
+        markets = await kalshi_client.get_markets(status=status, limit=limit, series_ticker=series_ticker)
         return {"markets": [m.model_dump(mode="json") for m in markets]}
     except Exception as e:
         # Return empty if no API keys configured

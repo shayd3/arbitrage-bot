@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useGames, useMarkets } from '../api/hooks'
 import GameCard from '../components/GameCard'
+import type { Game, KalshiMarket } from '../types'
 import { fetchStrategy, updateGlobal, updateSport, formatWindow, modeColor, type SportConfig, type GlobalConfig } from '../api/strategy'
 import { useGlobalConfigEditor, useSportConfigEditor } from '../hooks/useStrategyEditors'
 
@@ -168,6 +169,36 @@ const TABS = [
   { id: 'nhl', label: 'NHL' },
 ]
 
+const SPORT_SERIES_TICKERS: Record<string, string> = {
+  nba: 'KXNBAGAME',
+  nfl: 'KXNFLGAME',
+  mlb: 'KXMLBGAME',
+  nhl: 'KXNHLGAME',
+}
+
+// ESPN abbreviation → Kalshi abbreviation overrides (where they differ)
+const ESPN_TO_KALSHI: Record<string, string> = {
+  WSH: 'WAS', SA: 'SAS', NY: 'NYK', GS: 'GSW', NO: 'NOP',
+}
+
+function toKalshiAbbr(espnAbbr: string): string {
+  const upper = espnAbbr.toUpperCase()
+  return ESPN_TO_KALSHI[upper] ?? upper
+}
+
+function matchMarketsForGame(game: Game, markets: KalshiMarket[]): KalshiMarket[] {
+  const sport = game.sport.toUpperCase()
+  const homeAbbr = toKalshiAbbr(game.home_team.abbreviation)
+  const awayAbbr = toKalshiAbbr(game.away_team.abbreviation)
+  return markets.filter(m => {
+    if (m.status !== 'open' && m.status !== 'active') return false
+    const ticker = m.ticker.toUpperCase()
+    if (!ticker.includes(sport)) return false
+    // Both teams must appear in the ticker (KXNBAGAME format: OKCORL)
+    return ticker.includes(homeAbbr) && ticker.includes(awayAbbr)
+  })
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function LiveGames() {
@@ -181,7 +212,7 @@ export default function LiveGames() {
   })
 
   const { data: gamesData, isLoading: gamesLoading } = useGames(activeTab)
-  const { data: marketsData } = useMarkets()
+  const { data: marketsData } = useMarkets(SPORT_SERIES_TICKERS[activeTab])
 
   const globalMutation = useMutation({
     mutationFn: updateGlobal,
@@ -197,11 +228,6 @@ export default function LiveGames() {
   const games = gamesData?.games ?? []
   const markets = marketsData?.markets ?? []
   const activeSportConfig = strategy?.sports.find(s => s.sport === activeTab)
-
-  // Compute once per render instead of once per game card
-  const sportMarket = markets.find(m =>
-    m.ticker.toLowerCase().includes(activeTab) && m.status === 'open'
-  )
 
   return (
     <div className="space-y-5">
@@ -247,7 +273,7 @@ export default function LiveGames() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {games.map(game => (
-                <GameCard key={game.id} game={game} market={sportMarket} />
+                <GameCard key={game.id} game={game} markets={matchMarketsForGame(game, markets)} />
               ))}
             </div>
           )}
