@@ -1,8 +1,9 @@
-import type { Game, KalshiMarket } from '../types'
+import type { Game, KalshiMarket, Trade } from '../types'
 
 interface Props {
   game: Game
   markets: KalshiMarket[]
+  trades?: Trade[]
 }
 
 function ScoreBadge({ score, isLeading }: { score: number; isLeading: boolean }) {
@@ -83,12 +84,52 @@ function MarketRow({ market }: { market: KalshiMarket }) {
   )
 }
 
-export default function GameCard({ game, markets }: Props) {
+function computePnL(trade: Trade, markets: KalshiMarket[]): number | null {
+  if (trade.pnl != null) return trade.pnl
+  const market = markets.find(m => m.ticker === trade.ticker)
+  if (!market) return null
+  const currentValue = trade.side === 'yes' ? market.yes_bid : market.no_bid
+  if (currentValue == null) return null
+  return ((currentValue - trade.price) * trade.contracts) / 100
+}
+
+function TradeRow({ trade, markets }: { trade: Trade; markets: KalshiMarket[] }) {
+  const pnlDollars = computePnL(trade, markets)
+  const sideColor = trade.side === 'yes' ? 'text-green-400' : 'text-red-400'
+
+  return (
+    <div className="flex items-center justify-between text-xs">
+      <div className="flex items-center gap-2">
+        <span className={`font-semibold uppercase ${sideColor}`}>{trade.side}</span>
+        <span className="text-gray-300">{trade.contracts}x @ {trade.price}¢</span>
+        <span className="text-gray-600">{trade.status}</span>
+      </div>
+      {pnlDollars != null && (
+        <span className={`font-semibold ${pnlDollars >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          {pnlDollars >= 0 ? '+' : ''}{pnlDollars.toFixed(2)}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function TradeStrip({ trades, markets }: { trades: Trade[]; markets: KalshiMarket[] }) {
+  return (
+    <div className="border-t border-yellow-500/30 pt-2 space-y-1.5">
+      <span className="text-[10px] font-semibold uppercase text-yellow-400 tracking-wide">Active Trade{trades.length !== 1 ? 's' : ''}</span>
+      {trades.map(t => (
+        <TradeRow key={t.id} trade={t} markets={markets} />
+      ))}
+    </div>
+  )
+}
+
+export default function GameCard({ game, markets, trades }: Props) {
   const homeLeading = game.home_team.score > game.away_team.score
   const awayLeading = game.away_team.score > game.home_team.score
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
+    <div className={`bg-gray-900 border rounded-xl p-4 space-y-3 ${trades?.length ? 'border-yellow-500/60' : 'border-gray-800'}`}>
       <div className="flex items-center justify-between">
         <span className="text-xs text-gray-500 uppercase tracking-wide">{game.sport}</span>
         <ClockBadge game={game} />
@@ -105,6 +146,10 @@ export default function GameCard({ game, markets }: Props) {
           <ScoreBadge score={game.home_team.score} isLeading={homeLeading} />
         </div>
       </div>
+
+      {trades && trades.length > 0 && (
+        <TradeStrip trades={trades} markets={markets} />
+      )}
 
       {markets.length > 0 && (
         <div className="border-t border-gray-800 pt-3 space-y-2">

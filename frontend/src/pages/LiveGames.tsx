@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useGames, useMarkets } from '../api/hooks'
+import { useGames, useMarkets, useTrades } from '../api/hooks'
 import GameCard from '../components/GameCard'
-import type { Game, KalshiMarket } from '../types'
+import type { Game, KalshiMarket, Trade } from '../types'
 import { fetchStrategy, updateGlobal, updateSport, formatWindow, modeColor, type SportConfig, type GlobalConfig } from '../api/strategy'
 import { useGlobalConfigEditor, useSportConfigEditor } from '../hooks/useStrategyEditors'
 
@@ -213,6 +213,16 @@ export default function LiveGames() {
 
   const { data: gamesData, isLoading: gamesLoading } = useGames(activeTab)
   const { data: marketsData } = useMarkets(SPORT_SERIES_TICKERS[activeTab])
+  const { data: tradesData } = useTrades(strategy != null ? strategy.mode === 'simulation' : undefined)
+
+  const tradesByGame = (tradesData?.trades ?? []).reduce((map, trade) => {
+    if (!trade.game_id) return map
+    if (trade.status !== 'pending' && trade.status !== 'filled') return map
+    const list = map.get(trade.game_id) ?? []
+    list.push(trade)
+    map.set(trade.game_id, list)
+    return map
+  }, new Map<string, Trade[]>())
 
   const globalMutation = useMutation({
     mutationFn: updateGlobal,
@@ -273,7 +283,7 @@ export default function LiveGames() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {games.map(game => (
-                <GameCard key={game.id} game={game} markets={matchMarketsForGame(game, markets)} />
+                <GameCard key={game.id} game={game} markets={matchMarketsForGame(game, markets)} trades={tradesByGame.get(game.id)} />
               ))}
             </div>
           )}
