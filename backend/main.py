@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info(f"Kalshi environment: {'DEMO' if settings.kalshi_use_demo else 'PRODUCTION'}")
     await get_db()  # Initialize DB
-    from backend.scanner.engine import sync_live_balance
-    await sync_live_balance()
+    from backend.scanner.engine import sync_balance
+    await sync_balance()
     from backend.scanner.engine import scanner
     await scanner.start()
     yield

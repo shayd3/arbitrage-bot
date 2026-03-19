@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from datetime import datetime
 from backend.clients.espn import fetch_all_games
 from backend.clients.kalshi import kalshi_client
@@ -12,8 +13,8 @@ from backend.api.websocket import manager
 
 logger = logging.getLogger(__name__)
 
-async def sync_live_balance():
-    """Fetch real Kalshi balance and store in DB so risk checks have current data."""
+async def sync_balance():
+    """Fetch Kalshi balance and store in DB so risk checks have current data."""
     try:
         cents = await kalshi_client.get_balance()
         available = int(cents) / 100
@@ -23,9 +24,9 @@ async def sync_live_balance():
             portfolio_value=0.0,
             total=available,
         ))
-        logger.info(f"Synced live balance: ${available:.2f}")
+        logger.info(f"Synced balance: ${available:.2f}")
     except Exception as e:
-        logger.warning(f"Failed to sync live balance: {e}")
+        logger.warning(f"Failed to sync balance: {e}")
 
 class ScannerEngine:
     def __init__(self):
@@ -33,6 +34,7 @@ class ScannerEngine:
         self._task: asyncio.Task | None = None
         self._games: list[Game] = []
         self._markets: dict[Sport, list] = {}  # per-sport game winner markets
+        self._last_balance_sync: float = 0.0  # monotonic time of last balance sync
 
     async def start(self):
         if self._running:
@@ -63,8 +65,11 @@ class ScannerEngine:
             await asyncio.sleep(settings.espn_poll_interval)
 
     async def _scan(self):
-        # Keep balance in sync so risk checks have current data
-        await sync_live_balance()
+        # Throttle balance sync to kalshi_poll_interval to avoid excess API calls and DB writes
+        now = time.monotonic()
+        if now - self._last_balance_sync >= settings.kalshi_poll_interval:
+            await sync_balance()
+            self._last_balance_sync = now
 
         # Fetch live games
         games = await fetch_all_games()
