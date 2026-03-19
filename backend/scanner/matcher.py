@@ -162,6 +162,40 @@ def match_game_to_markets(game: Game, markets: list[KalshiMarket]) -> list[Kalsh
 
 OPEN_STATUSES = {"open", "active"}
 
+
+def sport_from_ticker(ticker: str) -> Sport | None:
+    """Determine the Sport from a Kalshi ticker prefix."""
+    ticker_upper = ticker.upper()
+    for sport, prefixes in SPORT_TICKER_PREFIX.items():
+        if any(ticker_upper.startswith(pfx) for pfx in prefixes):
+            return sport
+    return None
+
+
+def match_markets_to_games(
+    markets: list[KalshiMarket], games: list[Game]
+) -> list[tuple[Game, KalshiMarket]]:
+    """Iterate markets and find the matching game for each.
+
+    Returns a list of (game, market) pairs. Reuses match_game_to_markets
+    internally so matching logic stays in one place.
+    """
+    games_by_sport: dict[Sport, list[Game]] = {}
+    for g in games:
+        games_by_sport.setdefault(g.sport, []).append(g)
+
+    pairs: list[tuple[Game, KalshiMarket]] = []
+    for market in markets:
+        sport = sport_from_ticker(market.ticker)
+        if not sport:
+            continue
+        for game in games_by_sport.get(sport, []):
+            if match_game_to_markets(game, [market]):
+                pairs.append((game, market))
+                break
+    return pairs
+
+
 class GameMarketMatch:
     """Represents a matched game + market pair."""
     def __init__(self, game: Game, market: KalshiMarket, home_team_wins: bool):

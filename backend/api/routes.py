@@ -2,7 +2,6 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 import logging
 from pydantic import BaseModel
-from backend.clients.espn import fetch_all_games, fetch_games
 from backend.clients.kalshi import kalshi_client
 from backend.db import get_trades, get_latest_balance, get_balance_history, get_config_override, set_config_override
 from backend.models import Sport
@@ -29,14 +28,14 @@ async def health():
 
 @router.get("/games")
 async def get_games(sport: Optional[str] = Query(None)):
+    from backend.scanner.engine import scanner
+    games = scanner.games
     if sport:
         try:
             sport_enum = Sport(sport.lower())
-            games = await fetch_games(sport_enum)
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Unknown sport: {sport}")
-    else:
-        games = await fetch_all_games()
+        games = [g for g in games if g.sport == sport_enum]
     return {"games": [g.model_dump(mode="json") for g in games]}
 
 @router.get("/markets")

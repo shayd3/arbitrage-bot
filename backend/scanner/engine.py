@@ -2,10 +2,10 @@ import asyncio
 import logging
 import time
 from datetime import datetime
-from backend.clients.espn import fetch_all_games
+from backend.clients.espn import fetch_games
 from backend.clients.kalshi import kalshi_client
-from backend.models import Game, GameStatus, Sport, Balance
-from backend.scanner.matcher import match_game_to_markets
+from backend.models import Game, GameStatus, KalshiMarket, Sport, Balance
+from backend.scanner.matcher import match_markets_to_games
 from backend.scanner.sports import get_sport_config, SPORT_SERIES_TICKER
 from backend.db import log_scanner, insert_balance
 from backend.config import settings
@@ -33,8 +33,9 @@ class ScannerEngine:
         self._running = False
         self._task: asyncio.Task | None = None
         self._games: list[Game] = []
-        self._markets: dict[Sport, list] = {}  # per-sport game winner markets
-        self._last_balance_sync: float = 0.0  # monotonic time of last balance sync
+        self._markets: dict[Sport, list[KalshiMarket]] = {}
+        self._last_balance_sync: float = 0.0
+        self._last_market_fetch: float = 0.0
 
     async def start(self):
         if self._running:
@@ -65,56 +66,96 @@ class ScannerEngine:
             await asyncio.sleep(settings.espn_poll_interval)
 
     async def _scan(self):
-        # Throttle balance sync to kalshi_poll_interval to avoid excess API calls and DB writes
         now = time.monotonic()
+
+        # Throttle balance sync
         if now - self._last_balance_sync >= settings.kalshi_poll_interval:
             await sync_balance()
             self._last_balance_sync = now
 
-        # Fetch live games
-        games = await fetch_all_games()
-        self._games = games
+        # 1. Fetch Kalshi markets (throttled separately)
+        if now - self._last_market_fetch >= settings.kalshi_poll_interval:
+            await self._fetch_all_markets()
+            self._last_market_fetch = now
 
-        in_progress = [g for g in games if g.status == GameStatus.IN_PROGRESS]
+        # 2. Determine which sports have open markets
+        all_markets: list[KalshiMarket] = []
+        sports_with_markets: set[Sport] = set()
+        for sport, markets in self._markets.items():
+            if markets:
+                sports_with_markets.add(sport)
+                all_markets.extend(markets)
 
-        if not in_progress:
+        if not sports_with_markets:
+            self._games = []
+            await manager.broadcast("games_update", {
+                "games": [],
+                "timestamp": datetime.utcnow().isoformat(),
+            })
             return
 
-        # Fetch game winner markets per sport in play
-        sports_in_play = {g.sport for g in in_progress}
-        for sport in sports_in_play:
-            series_ticker = SPORT_SERIES_TICKER.get(sport)
-            if not series_ticker:
-                continue
-            try:
-                self._markets[sport] = await kalshi_client.get_markets(
-                    status="open", limit=100, series_ticker=series_ticker
-                )
-            except Exception as e:
-                logger.warning(f"Failed to fetch {sport} markets: {e}")
-                # Continue with cached markets
+        # 3. Fetch ESPN scoreboards only for sports with open markets
+        espn_tasks = {
+            sport: fetch_games(sport) for sport in sports_with_markets
+        }
+        espn_results = await asyncio.gather(
+            *espn_tasks.values(), return_exceptions=True
+        )
+        all_games: list[Game] = []
+        for sport, result in zip(espn_tasks.keys(), espn_results):
+            if isinstance(result, Exception):
+                logger.warning(f"Failed to fetch ESPN {sport.value} games: {result}")
+            else:
+                all_games.extend(result)
 
-        for game in in_progress:
-            await self._process_game(game)
+        self._games = all_games
 
-        # Broadcast game updates to dashboard
+        # 4. Match markets → games
+        in_progress = [g for g in all_games if g.status == GameStatus.IN_PROGRESS]
+        pairs = match_markets_to_games(all_markets, in_progress)
+
+        # 5. Process each matched pair
+        for game, market in pairs:
+            await self._process_game_market(game, market)
+
+        # 6. Broadcast all games to dashboard
         await manager.broadcast("games_update", {
-            "games": [g.model_dump(mode="json") for g in games],
+            "games": [g.model_dump(mode="json") for g in all_games],
             "timestamp": datetime.utcnow().isoformat(),
         })
 
-    async def _process_game(self, game: Game):
+    async def _fetch_all_markets(self):
+        """Fetch Kalshi game-winner markets for all sports concurrently."""
+        async def _fetch_sport(sport: Sport, series_ticker: str):
+            try:
+                return sport, await kalshi_client.get_markets(
+                    status="open", limit=100, series_ticker=series_ticker
+                )
+            except Exception as e:
+                logger.warning(f"Failed to fetch {sport.value} markets: {e}")
+                return sport, None
+
+        tasks = [
+            _fetch_sport(sport, ticker)
+            for sport, ticker in SPORT_SERIES_TICKER.items()
+        ]
+        results = await asyncio.gather(*tasks)
+        for sport, markets in results:
+            if markets is not None:
+                self._markets[sport] = markets
+
+    async def _process_game_market(self, game: Game, market: KalshiMarket):
+        """Evaluate a single already-matched (game, market) pair."""
         config = await get_sport_config(game.sport)
 
-        # Check if we're in the critical window
         if not game.clock:
             return
 
         clock = game.clock
         is_final_period = clock.period == config.final_period
         in_time_window = (
-            clock.seconds_remaining is not None and
-            clock.seconds_remaining <= config.final_period_window
+            clock.seconds_remaining is not None
+            and clock.seconds_remaining <= config.final_period_window
         )
 
         if not (is_final_period and in_time_window):
@@ -124,13 +165,10 @@ class ScannerEngine:
         if lead < config.min_lead:
             return
 
-        # Find matching Kalshi markets
-        sport_markets = self._markets.get(game.sport, [])
-        matches = match_game_to_markets(game, sport_markets)
-        if not matches:
-            return
-
-        leading_team = game.home_team if game.home_team.score > game.away_team.score else game.away_team
+        leading_team = (
+            game.home_team if game.home_team.score > game.away_team.score
+            else game.away_team
+        )
 
         await log_scanner("info", f"Opportunity detected: {game.id}", {
             "game_id": game.id,
@@ -141,7 +179,7 @@ class ScannerEngine:
             "lead": lead,
             "period": clock.period,
             "clock": clock.display_clock,
-            "matched_markets": [m.ticker for m in matches],
+            "matched_markets": [market.ticker],
         })
 
         await manager.broadcast("opportunity", {
@@ -150,13 +188,11 @@ class ScannerEngine:
             "lead": lead,
             "clock": clock.display_clock,
             "period": clock.period,
-            "markets": [m.model_dump(mode="json") for m in matches],
+            "markets": [market.model_dump(mode="json")],
         })
 
-        # Dispatch to strategy evaluator
         from backend.strategy.evaluator import evaluator
-        for market in matches:
-            await evaluator.evaluate(game, market, config)
+        await evaluator.evaluate(game, market, config)
 
     @property
     def games(self) -> list[Game]:
