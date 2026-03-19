@@ -29,6 +29,7 @@ async def health():
 @router.get("/games")
 async def get_games(sport: Optional[str] = Query(None)):
     from backend.scanner.engine import scanner
+    from backend.clients.espn import fetch_games
     games = scanner.games
     if sport:
         try:
@@ -36,6 +37,11 @@ async def get_games(sport: Optional[str] = Query(None)):
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Unknown sport: {sport}")
         games = [g for g in games if g.sport == sport_enum]
+        if not games:
+            try:
+                games = await fetch_games(sport_enum)
+            except Exception as e:
+                logger.warning(f"ESPN fallback failed for {sport_enum.value}: {e}")
     return {"games": [g.model_dump(mode="json") for g in games]}
 
 @router.get("/markets")

@@ -86,17 +86,10 @@ class ScannerEngine:
                 sports_with_markets.add(sport)
                 all_markets.extend(markets)
 
-        if not sports_with_markets:
-            self._games = []
-            await manager.broadcast("games_update", {
-                "games": [],
-                "timestamp": datetime.utcnow().isoformat(),
-            })
-            return
-
-        # 3. Fetch ESPN scoreboards only for sports with open markets
+        # 3. Fetch ESPN scoreboards for sports with open markets, or all sports as fallback
+        sports_to_fetch = sports_with_markets if sports_with_markets else set(Sport)
         espn_tasks = {
-            sport: fetch_games(sport) for sport in sports_with_markets
+            sport: fetch_games(sport) for sport in sports_to_fetch
         }
         espn_results = await asyncio.gather(
             *espn_tasks.values(), return_exceptions=True
@@ -110,13 +103,26 @@ class ScannerEngine:
 
         self._games = all_games
 
+        if not sports_with_markets:
+            await manager.broadcast("games_update", {
+                "games": [g.model_dump(mode="json") for g in all_games],
+                "timestamp": datetime.utcnow().isoformat(),
+            })
+            return
+
         # 4. Match markets → games
         in_progress = [g for g in all_games if g.status == GameStatus.IN_PROGRESS]
         pairs = match_markets_to_games(all_markets, in_progress)
 
-        # 5. Process each matched pair
+        # 5. Group markets by game and process once per game
+        markets_by_game: dict[str, tuple[Game, list[KalshiMarket]]] = {}
         for game, market in pairs:
-            await self._process_game_market(game, market)
+            if game.id not in markets_by_game:
+                markets_by_game[game.id] = (game, [])
+            markets_by_game[game.id][1].append(market)
+
+        for _, (game, matched_markets) in markets_by_game.items():
+            await self._process_game_markets(game, matched_markets)
 
         # 6. Broadcast all games to dashboard
         await manager.broadcast("games_update", {
@@ -144,8 +150,8 @@ class ScannerEngine:
             if markets is not None:
                 self._markets[sport] = markets
 
-    async def _process_game_market(self, game: Game, market: KalshiMarket):
-        """Evaluate a single already-matched (game, market) pair."""
+    async def _process_game_markets(self, game: Game, markets: list[KalshiMarket]):
+        """Evaluate a matched game with all its corresponding markets."""
         config = await get_sport_config(game.sport)
 
         if not game.clock:
@@ -179,7 +185,7 @@ class ScannerEngine:
             "lead": lead,
             "period": clock.period,
             "clock": clock.display_clock,
-            "matched_markets": [market.ticker],
+            "matched_markets": [m.ticker for m in markets],
         })
 
         await manager.broadcast("opportunity", {
@@ -188,11 +194,12 @@ class ScannerEngine:
             "lead": lead,
             "clock": clock.display_clock,
             "period": clock.period,
-            "markets": [market.model_dump(mode="json")],
+            "markets": [m.model_dump(mode="json") for m in markets],
         })
 
         from backend.strategy.evaluator import evaluator
-        await evaluator.evaluate(game, market, config)
+        for market in markets:
+            await evaluator.evaluate(game, market, config)
 
     @property
     def games(self) -> list[Game]:
