@@ -23,7 +23,7 @@ export function useGlobalConfigEditor(g: GlobalConfig) {
       setLoss(String(g.max_daily_loss))
       setEspnInterval(String(g.espn_poll_interval ?? 10))
       setKalshiInterval(String(g.kalshi_poll_interval ?? 15))
-      setSyncInterval(String(g.kalshi_sync_interval ?? 60))
+      setSyncInterval(String(g.kalshi_sync_interval ?? 1800))
     }
   }, [g.max_position_pct, g.max_open_positions, g.max_daily_loss, g.espn_poll_interval, g.kalshi_poll_interval, g.kalshi_sync_interval, editing])
 

@@ -131,12 +131,13 @@ async def get_balance_history(limit: int = 100) -> list[dict]:
     rows = await cursor.fetchall()
     return [dict(r) for r in rows]
 
-async def sync_trade_from_order(order: dict):
+async def sync_trade_from_order(order: dict, *, commit: bool = True):
     """
     Upsert a trade record from a raw Kalshi order dict.
     - Inserts if the kalshi_order_id is not yet in the DB.
     - Updates status if it has changed (e.g. pending → filled).
     game_id will be null for orders not captured at placement time.
+    Set commit=False to batch multiple calls and commit externally.
     """
     order_id = order.get("order_id")
     if not order_id:
@@ -145,11 +146,17 @@ async def sync_trade_from_order(order: dict):
     ticker = order.get("ticker", "")
     side = order.get("side", "")  # "yes" or "no"
     contracts = order.get("filled_count") or order.get("count") or 0
-    # Price paid in cents: yes_price if side=yes, no_price if side=no
+    # Price paid in cents: yes_price if side=yes; for NO orders derive from yes_price
+    # (Kalshi API always sends yes_price; NO orders are placed at 100 - yes_price)
     if side == "yes":
         price = round(float(order.get("yes_price") or order.get("yes_bid") or 0))
     else:
-        price = round(float(order.get("no_price") or order.get("no_bid") or 0))
+        no_price = order.get("no_price") or order.get("no_bid")
+        if no_price:
+            price = round(float(no_price))
+        else:
+            yes_price = float(order.get("yes_price") or order.get("yes_bid") or 0)
+            price = round(100 - yes_price) if yes_price else 0
 
     kalshi_status = order.get("status", "")
     if kalshi_status == "filled":
@@ -186,7 +193,8 @@ async def sync_trade_from_order(order: dict):
                 (status, row["id"])
             )
 
-    await db.commit()
+    if commit:
+        await db.commit()
 
 async def get_filled_trades() -> list[dict]:
     """Return all trades with status='filled' — candidates for settlement checking."""

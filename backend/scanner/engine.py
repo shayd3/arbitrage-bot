@@ -18,14 +18,18 @@ async def sync_trades_from_kalshi():
     Reconcile local DB against Kalshi's order history.
     Inserts orders missing from the DB (e.g. placed while app was down)
     and updates status on records that have drifted.
+    Commits once after processing all orders (batched).
     """
     try:
         orders = await kalshi_client.get_orders(limit=100)
         synced = 0
         for order in orders:
-            await sync_trade_from_order(order)
+            await sync_trade_from_order(order, commit=False)
             synced += 1
         if synced:
+            from backend.db import get_db
+            db = await get_db()
+            await db.commit()
             logger.debug(f"Synced {synced} orders from Kalshi")
     except Exception as e:
         logger.error(f"Trade sync error: {e}", exc_info=True)
