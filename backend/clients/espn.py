@@ -1,8 +1,10 @@
 import logging
+import time
 from datetime import datetime
 
 import httpx
 
+from backend.metrics import espn_poll_latency_seconds
 from backend.models import Game, GameClock, GameStatus, Sport, Team
 from backend.scanner.sports import get_sport_config
 
@@ -116,7 +118,9 @@ async def fetch_games(sport: Sport = Sport.NBA) -> list[Game]:
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
+            t0 = time.perf_counter()
             response = await client.get(url)
+            espn_poll_latency_seconds.labels(sport=sport.value).observe(time.perf_counter() - t0)
             response.raise_for_status()
             data = response.json()
         except httpx.HTTPError as e:

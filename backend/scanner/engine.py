@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from backend.api.websocket import manager
 from backend.clients.espn import fetch_games
@@ -10,10 +10,18 @@ from backend.config import settings
 from backend.db import (
     get_config_override,
     get_filled_trades,
+    get_trades,
     insert_balance,
     log_scanner,
     settle_trade,
     sync_trade_from_order,
+)
+from backend.metrics import (
+    active_positions,
+    available_balance,
+    daily_pnl,
+    opportunities_found_total,
+    scanner_cycles_total,
 )
 from backend.models import Balance, Game, GameStatus, KalshiMarket, Sport
 from backend.scanner.matcher import match_markets_to_games
@@ -103,16 +111,17 @@ async def sync_balance():
     """Fetch Kalshi balance and store in DB so risk checks have current data."""
     try:
         cents = await kalshi_client.get_balance()
-        available = int(cents) / 100
+        bal = int(cents) / 100
         await insert_balance(
             Balance(
                 timestamp=datetime.now(UTC),
-                available=available,
+                available=bal,
                 portfolio_value=0.0,
-                total=available,
+                total=bal,
             )
         )
-        logger.info(f"Synced balance: ${available:.2f}")
+        available_balance.set(bal)
+        logger.info(f"Synced balance: ${bal:.2f}")
     except Exception as e:
         logger.warning(f"Failed to sync balance: {e}")
 
@@ -177,8 +186,25 @@ class ScannerEngine:
             except (json.JSONDecodeError, ValueError, TypeError):
                 pass
 
+    async def _update_position_gauges(self):
+        """Refresh active_positions and daily_pnl gauges from the DB."""
+        try:
+            trades = await get_trades(limit=500)
+            open_count = sum(1 for t in trades if t["status"] in ("pending", "filled"))
+            active_positions.set(open_count)
+            today = date.today().isoformat()
+            today_pnl = sum(
+                t["pnl"]
+                for t in trades
+                if t["created_at"].startswith(today) and t["pnl"] is not None
+            )
+            daily_pnl.set(today_pnl)
+        except Exception as e:
+            logger.warning(f"Failed to update position gauges: {e}")
+
     async def _scan(self):
         await self._refresh_intervals()
+        scanner_cycles_total.inc()
         now = time.monotonic()
 
         # Sync orders from Kalshi (reconcile DB with remote state)
@@ -195,6 +221,8 @@ class ScannerEngine:
         if now - self._last_balance_sync >= self._kalshi_interval:
             await sync_balance()
             self._last_balance_sync = now
+
+        await self._update_position_gauges()
 
         # 1. Fetch Kalshi markets (throttled separately)
         if now - self._last_market_fetch >= self._kalshi_interval:
@@ -301,6 +329,8 @@ class ScannerEngine:
         leading_team = (
             game.home_team if game.home_team.score > game.away_team.score else game.away_team
         )
+
+        opportunities_found_total.labels(sport=game.sport.value).inc()
 
         await log_scanner(
             "info",
