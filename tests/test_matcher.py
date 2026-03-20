@@ -63,21 +63,46 @@ class TestNormalizeTeamName:
 
 class TestTeamToKalshiAbbrev:
     def test_full_name(self):
-        assert team_to_kalshi_abbrev("Los Angeles Lakers") == "LAL"
+        assert team_to_kalshi_abbrev("Los Angeles Lakers", Sport.NBA) == "LAL"
 
     def test_nickname_only(self):
-        assert team_to_kalshi_abbrev("lakers") == "LAL"
+        assert team_to_kalshi_abbrev("lakers", Sport.NBA) == "LAL"
 
     def test_case_insensitive(self):
-        assert team_to_kalshi_abbrev("BOSTON CELTICS") == "BOS"
+        assert team_to_kalshi_abbrev("BOSTON CELTICS", Sport.NBA) == "BOS"
 
     def test_unknown_team_returns_none(self):
-        assert team_to_kalshi_abbrev("Springfield Isotopes") is None
+        assert team_to_kalshi_abbrev("Springfield Isotopes", Sport.NBA) is None
 
     def test_alias_variant(self):
-        assert team_to_kalshi_abbrev("cavs") == "CLE"
-        assert team_to_kalshi_abbrev("sixers") == "PHI"
-        assert team_to_kalshi_abbrev("twolves") == "MIN"
+        assert team_to_kalshi_abbrev("cavs", Sport.NBA) == "CLE"
+        assert team_to_kalshi_abbrev("sixers", Sport.NBA) == "PHI"
+        assert team_to_kalshi_abbrev("twolves", Sport.NBA) == "MIN"
+
+    def test_nfl_team(self):
+        assert team_to_kalshi_abbrev("kansas city chiefs", Sport.NFL) == "KC"
+        assert team_to_kalshi_abbrev("chiefs", Sport.NFL) == "KC"
+
+    def test_nhl_team(self):
+        assert team_to_kalshi_abbrev("toronto maple leafs", Sport.NHL) == "TOR"
+        assert team_to_kalshi_abbrev("leafs", Sport.NHL) == "TOR"
+
+    def test_mlb_team(self):
+        assert team_to_kalshi_abbrev("new york yankees", Sport.MLB) == "NYY"
+        assert team_to_kalshi_abbrev("yankees", Sport.MLB) == "NYY"
+
+    def test_wnba_team(self):
+        assert team_to_kalshi_abbrev("las vegas aces", Sport.WNBA) == "LV"
+        assert team_to_kalshi_abbrev("aces", Sport.WNBA) == "LV"
+
+    def test_cross_sport_collision_avoided(self):
+        """'kings' maps to SAC in NBA but LAK in NHL."""
+        assert team_to_kalshi_abbrev("kings", Sport.NBA) == "SAC"
+        assert team_to_kalshi_abbrev("kings", Sport.NHL) == "LAK"
+
+    def test_wrong_sport_returns_none(self):
+        """NBA team name should not resolve in NFL context."""
+        assert team_to_kalshi_abbrev("lakers", Sport.NFL) is None
 
 
 # ---------------------------------------------------------------------------
@@ -300,6 +325,12 @@ class TestSportFromTicker:
 
     def test_nhl_game_prefix(self):
         assert sport_from_ticker("KXNHLGAME-17SEP24BOSNYC-BOS") == Sport.NHL
+
+    def test_wnba_game_prefix(self):
+        assert sport_from_ticker("KXWNBAGAME-26MAY25LVNY-LV") == Sport.WNBA
+
+    def test_cbb_game_prefix(self):
+        assert sport_from_ticker("KXCBBGAME-26MAR25DUKUNC-DUK") == Sport.CBB
 
     def test_case_insensitive(self):
         assert sport_from_ticker("kxnbagame-lal-bos") == Sport.NBA

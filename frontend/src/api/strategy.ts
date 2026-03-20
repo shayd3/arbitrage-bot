@@ -51,6 +51,8 @@ export const SPORT_META: Record<string, { label: string; leadUnit: string }> = {
   nfl: { label: 'NFL', leadUnit: 'pts' },
   nhl: { label: 'NHL', leadUnit: 'goals' },
   mlb: { label: 'MLB', leadUnit: 'runs' },
+  wnba: { label: 'WNBA', leadUnit: 'pts' },
+  cbb: { label: 'CBB', leadUnit: 'pts' },
 }
 
 export function formatWindow(sport: string, seconds: number): string {

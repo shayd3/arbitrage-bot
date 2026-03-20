@@ -13,6 +13,8 @@ class Sport(str, Enum):
     NFL = "nfl"
     MLB = "mlb"
     NHL = "nhl"
+    WNBA = "wnba"
+    CBB = "cbb"
 
 class Team(BaseModel):
     id: str
