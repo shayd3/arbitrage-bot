@@ -15,6 +15,10 @@ Monitor real-time game scores · Identify mispriced markets · Execute trades wi
 
 ---
 
+> **Disclaimer:** This software is provided for educational and informational purposes only. Use at your own risk. Prediction markets are a form of gambling and carry real financial risk — you may lose money. The author is not responsible for any financial losses, damages, or other consequences resulting from the use of this bot. Never trade with money you cannot afford to lose.
+
+---
+
 ## How It Works
 
 The bot polls ESPN's public API for live scores, matches active games against open Kalshi markets, and applies a **late-game value strategy** — looking for markets where implied probability hasn't caught up to the current game state. Trades are gated by pre-trade risk checks before any order is placed.
