@@ -2,7 +2,7 @@ import logging
 from backend.execution.risk import pre_trade_checks, RiskError
 from backend.db import insert_trade, log_scanner
 from backend.models import Trade, TradeStatus, MarketSide
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ class Executor:
                 contracts=contracts,
                 price=price,
                 status=TradeStatus.FILLED,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
                 game_id=game_id,
             )
             trade_id = await insert_trade(trade)

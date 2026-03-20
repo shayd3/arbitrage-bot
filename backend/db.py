@@ -1,6 +1,6 @@
 import aiosqlite
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from backend.config import settings
 from backend.models import Trade, Balance, TradeStatus, MarketSide
@@ -90,7 +90,7 @@ async def insert_trade(trade: Trade) -> int:
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (trade.kalshi_order_id, trade.ticker, trade.side.value, trade.contracts,
          trade.price, trade.status.value, trade.pnl,
-         (trade.created_at or datetime.utcnow()).isoformat(), trade.game_id)
+         (trade.created_at or datetime.now(timezone.utc)).isoformat(), trade.game_id)
     )
     await db.commit()
     return cursor.lastrowid
@@ -166,7 +166,7 @@ async def sync_trade_from_order(order: dict, *, commit: bool = True):
     else:
         status = "pending"
 
-    created_time = order.get("created_time") or datetime.utcnow().isoformat()
+    created_time = order.get("created_time") or datetime.now(timezone.utc).isoformat()
 
     db = await get_db()
     existing = await db.execute(
@@ -219,7 +219,7 @@ async def log_scanner(level: str, message: str, data: dict | None = None):
     db = await get_db()
     await db.execute(
         "INSERT INTO scanner_log (level, message, data_json, created_at) VALUES (?, ?, ?, ?)",
-        (level, message, json.dumps(data) if data else None, datetime.utcnow().isoformat())
+        (level, message, json.dumps(data) if data else None, datetime.now(timezone.utc).isoformat())
     )
     await db.commit()
 
@@ -234,6 +234,6 @@ async def set_config_override(key: str, value: str):
     await db.execute(
         """INSERT INTO config_overrides (key, value, updated_at) VALUES (?, ?, ?)
            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at""",
-        (key, value, datetime.utcnow().isoformat())
+        (key, value, datetime.now(timezone.utc).isoformat())
     )
     await db.commit()

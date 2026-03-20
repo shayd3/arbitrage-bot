@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from backend.clients.espn import fetch_games
 from backend.clients.kalshi import kalshi_client
 from backend.models import Game, GameStatus, KalshiMarket, Sport, Balance
@@ -56,7 +56,7 @@ async def check_settlements():
         if not settled_map:
             return
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         for trade in trades:
             result = settled_map.get(trade["ticker"])
             if not result:
@@ -89,7 +89,7 @@ async def sync_balance():
         cents = await kalshi_client.get_balance()
         available = int(cents) / 100
         await insert_balance(Balance(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             available=available,
             portfolio_value=0.0,
             total=available,
@@ -205,7 +205,7 @@ class ScannerEngine:
         if not sports_with_markets:
             await manager.broadcast("games_update", {
                 "games": [g.model_dump(mode="json") for g in all_games],
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             })
             return
 
@@ -226,7 +226,7 @@ class ScannerEngine:
         # 6. Broadcast all games to dashboard
         await manager.broadcast("games_update", {
             "games": [g.model_dump(mode="json") for g in all_games],
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
     async def _fetch_all_markets(self):
