@@ -1,0 +1,10 @@
+.git/
+.github/
+.gitignore
+tests/
+docs/
+k8s/
+*.md
+.env*
+docker-compose.yml
+frontend/node_modules/
