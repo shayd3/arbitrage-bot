@@ -40,6 +40,7 @@ ESPN (live scores) ──▶ Scanner Engine ──▶ Market Matcher ──▶ S
 | Football | NFL |
 | Hockey | NHL |
 | Baseball | MLB |
+| Basketball | NBA |
 | Basketball | WNBA |
 | Basketball | CBB (College) |
 
