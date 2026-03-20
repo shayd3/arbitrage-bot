@@ -1,5 +1,6 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import type { Balance } from '../types'
+import { parseUTCDate } from '../utils/time'
 
 interface Props {
   history: Balance[]
@@ -7,7 +8,7 @@ interface Props {
 
 export default function PnLChart({ history }: Props) {
   const data = [...history].reverse().map((b) => ({
-    time: b.timestamp ? new Date(b.timestamp).toLocaleTimeString() : '',
+    time: b.timestamp ? parseUTCDate(b.timestamp).toLocaleTimeString() : '',
     total: b.total.toFixed(2),
   }))
 

@@ -1,4 +1,5 @@
 import type { Trade } from '../types'
+import { parseUTCDate } from '../utils/time'
 
 interface Props {
   trades: Trade[]
@@ -50,7 +51,7 @@ export default function TradeTable({ trades }: Props) {
                 ) : '—'}
               </td>
               <td className="py-2 text-gray-500">
-                {new Date(trade.created_at).toLocaleTimeString()}
+                {parseUTCDate(trade.created_at).toLocaleTimeString()}
               </td>
             </tr>
           ))}

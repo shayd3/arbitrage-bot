@@ -1,5 +1,6 @@
 import type { Game, KalshiMarket, Trade, KalshiPosition } from '../types'
 import { toKalshiAbbr } from '../utils/teams'
+import { parseUTCDate } from '../utils/time'
 
 interface Props {
   game: Game
@@ -20,7 +21,7 @@ function ClockBadge({ game }: { game: Game }) {
   if (game.status === 'scheduled') {
     return (
       <span className="text-xs text-gray-500">
-        {game.start_time ? new Date(game.start_time).toLocaleTimeString() : 'TBD'}
+        {game.start_time ? parseUTCDate(game.start_time).toLocaleTimeString() : 'TBD'}
       </span>
     )
   }
