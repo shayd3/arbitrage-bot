@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: arbitrage-bot-frontend:latest
+          image: ghcr.io/shayd3/arbitrage-bot/frontend:latest
           ports:
             - containerPort: 80
           livenessProbe:
