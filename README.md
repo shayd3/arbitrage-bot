@@ -1,46 +1,79 @@
+<div align="center">
+
 # Arbitrage Bot
 
-A sports prediction market bot targeting Kalshi. The bot monitors live sports scores via ESPN's public API and identifies potential value betting opportunities on Kalshi prediction markets.
+**A live sports prediction market scanner for [Kalshi](https://kalshi.com)**
 
-## Overview
+Monitor real-time game scores · Identify mispriced markets · Execute trades with risk controls
 
-- **Backend**: Python 3.12+ with FastAPI, asyncio, httpx, and aiosqlite
-- **Frontend**: Vite + React + TypeScript with TanStack Query, Recharts, and Tailwind CSS v4
-- **Database**: SQLite via aiosqlite (local audit trail + balance history)
+[![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-TypeScript-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
+[![SQLite](https://img.shields.io/badge/SQLite-aiosqlite-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://sqlite.org)
 
-## Kalshi API Key Setup
+</div>
 
-1. Go to [kalshi.com](https://kalshi.com) and log in to your account
-2. Navigate to **Account** → **API**
-3. Click **Generate RSA key pair**
-4. Download the private key file (`.pem`) to your project directory
-5. Copy the displayed API Key ID — you will need it for your `.env` file
+---
 
-For testing, use the [Kalshi demo environment](https://demo.kalshi.co) and set `KALSHI_USE_DEMO=true`.
+## How It Works
+
+The bot polls ESPN's public API for live scores, matches active games against open Kalshi markets, and applies a **late-game value strategy** — looking for markets where implied probability hasn't caught up to the current game state. Trades are gated by pre-trade risk checks before any order is placed.
+
+```
+ESPN (live scores) ──▶ Scanner Engine ──▶ Market Matcher ──▶ Strategy Evaluator
+                                                                       │
+                                                               Risk Checks
+                                                                       │
+                                                            Kalshi Order Placement
+```
+
+---
+
+## Supported Sports
+
+| Sport | League |
+|-------|--------|
+| Football | NFL |
+| Hockey | NHL |
+| Baseball | MLB |
+| Basketball | WNBA |
+| Basketball | CBB (College) |
+
+---
+
+## Features
+
+- **Real-time scanning** — polls ESPN on a configurable interval; pushes updates to the UI over WebSocket
+- **Per-sport strategy** — independently tunable thresholds, max positions, and bet sizes per league
+- **Risk controls** — max position size, max daily loss, and per-trade limits enforced before every order
+- **Trade audit trail** — every order attempt and settlement logged to a local SQLite database
+- **Balance history** — snapshots portfolio value over time for charting
+- **Live dashboard** — React frontend with charts, open positions, scanner log, and strategy controls
+- **Demo mode** — full workflow against Kalshi's demo environment with no real money at risk
+
+---
+
+## Kalshi API Setup
+
+1. Go to [kalshi.com](https://kalshi.com) → **Account** → **API**
+2. Click **Generate RSA key pair** and download the private key (`.pem`)
+3. Copy the displayed **API Key ID** — you'll need it for `.env`
+
+> For testing, use [demo.kalshi.co](https://demo.kalshi.co) and set `KALSHI_USE_DEMO=true`.
+
+---
 
 ## Setup
 
 ### Backend
 
-1. Copy the example environment file and fill in your credentials:
-   ```bash
-   cp .env.example .env
-   ```
-   Edit `.env` and set:
-   - `KALSHI_API_KEY_ID` — your API key ID from Kalshi
-   - `KALSHI_PRIVATE_KEY_PATH` — path to your downloaded `.pem` file
-   - `KALSHI_USE_DEMO` — `true` for demo, `false` for live trading
-
-2. Install dependencies with [uv](https://github.com/astral-sh/uv):
-   ```bash
-   uv sync
-   ```
-
-3. Run the backend:
-   ```bash
-   uv run python -m backend.main
-   ```
-   The API will be available at `http://localhost:8000`.
+```bash
+cp .env.example .env
+# Edit .env — set KALSHI_API_KEY_ID, KALSHI_PRIVATE_KEY_PATH, KALSHI_USE_DEMO
+uv sync
+uv run python -m backend.main
+# API available at http://localhost:8000
+```
 
 ### Frontend
 
@@ -48,11 +81,12 @@ For testing, use the [Kalshi demo environment](https://demo.kalshi.co) and set `
 cd frontend
 npm install
 npm run dev
+# Available at http://localhost:5173
 ```
 
-The frontend will be available at `http://localhost:5173`.
+---
 
-## API Endpoints
+## API Reference
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -70,6 +104,8 @@ The frontend will be available at `http://localhost:5173`.
 | GET | `/api/scanner/status` | Scanner running state |
 | GET | `/api/scanner/log` | Recent scanner log entries |
 | WS | `/ws` | Real-time game/opportunity updates |
+
+---
 
 ## Project Structure
 
@@ -107,6 +143,8 @@ arbitrage-bot/
 ├── .env.example
 └── pyproject.toml
 ```
+
+---
 
 ## Further Reading
 
