@@ -56,7 +56,7 @@ SPORT_CONFIGS: dict[Sport, SportConfig] = {
     Sport.MLB: SportConfig(
         sport=Sport.MLB,
         final_period=9,
-        final_period_window=0.0,   # Late innings (7th+)
+        final_period_window=0.0,   # No game clock; gate triggers at final_period (9th inning)
         min_lead=5,
         min_yes_price=88,
         poll_interval=20.0,
