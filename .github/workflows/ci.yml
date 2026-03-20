@@ -19,8 +19,24 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev
 
-      - name: Run tests
+      - name: Lint (ruff check)
+        run: uv run ruff check .
+
+      - name: Format check (ruff format)
+        run: uv run ruff format --check .
+
+      - name: Type check (mypy)
+        run: uv run mypy backend/
+
+      - name: Run tests with coverage
         run: uv run pytest tests/ -v
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   frontend:
     name: Frontend type-check & build
@@ -37,6 +53,14 @@ jobs:
       - name: Install dependencies
         working-directory: frontend
         run: npm ci
+
+      - name: Lint (ESLint)
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Run tests (vitest)
+        working-directory: frontend
+        run: npm run test
 
       - name: Type-check & build
         working-directory: frontend
