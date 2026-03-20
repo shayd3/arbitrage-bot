@@ -86,7 +86,7 @@ async def close_db():
         _db = None
 
 
-async def insert_trade(trade: Trade) -> int:
+async def insert_trade(trade: Trade) -> int | None:
     db = await get_db()
     cursor = await db.execute(
         """INSERT INTO trades (kalshi_order_id, ticker, side, contracts, price, status, pnl, created_at, game_id)

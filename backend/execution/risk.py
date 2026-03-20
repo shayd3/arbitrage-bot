@@ -46,7 +46,7 @@ async def get_max_position_dollars() -> float:
     params = await _get_risk_params()
     balance = await get_latest_balance()
     available = balance["available"] if balance else 0.0
-    return available * params["max_position_pct"]
+    return float(available * params["max_position_pct"])
 
 
 async def pre_trade_checks(
