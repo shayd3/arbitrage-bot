@@ -8,12 +8,21 @@ from backend.clients.espn import fetch_games
 from backend.clients.kalshi import kalshi_client
 from backend.config import settings
 from backend.db import (
+    count_active_positions,
     get_config_override,
     get_filled_trades,
     insert_balance,
     log_scanner,
     settle_trade,
+    sum_daily_pnl,
     sync_trade_from_order,
+)
+from backend.metrics import (
+    active_positions,
+    available_balance,
+    daily_pnl,
+    opportunities_found_total,
+    scanner_cycles_total,
 )
 from backend.models import Balance, Game, GameStatus, KalshiMarket, Sport
 from backend.scanner.matcher import match_markets_to_games
@@ -103,16 +112,17 @@ async def sync_balance():
     """Fetch Kalshi balance and store in DB so risk checks have current data."""
     try:
         cents = await kalshi_client.get_balance()
-        available = int(cents) / 100
+        bal = int(cents) / 100
         await insert_balance(
             Balance(
                 timestamp=datetime.now(UTC),
-                available=available,
+                available=bal,
                 portfolio_value=0.0,
-                total=available,
+                total=bal,
             )
         )
-        logger.info(f"Synced balance: ${available:.2f}")
+        available_balance.set(bal)
+        logger.info(f"Synced balance: ${bal:.2f}")
     except Exception as e:
         logger.warning(f"Failed to sync balance: {e}")
 
@@ -177,6 +187,17 @@ class ScannerEngine:
             except (json.JSONDecodeError, ValueError, TypeError):
                 pass
 
+    async def _update_position_gauges(self):
+        """Refresh active_positions and daily_pnl gauges from the DB."""
+        try:
+            open_count = await count_active_positions()
+            active_positions.set(open_count)
+            today = datetime.now(UTC).date()
+            today_pnl = await sum_daily_pnl(today)
+            daily_pnl.set(today_pnl)
+        except Exception as e:
+            logger.warning(f"Failed to update position gauges: {e}")
+
     async def _scan(self):
         await self._refresh_intervals()
         now = time.monotonic()
@@ -195,6 +216,8 @@ class ScannerEngine:
         if now - self._last_balance_sync >= self._kalshi_interval:
             await sync_balance()
             self._last_balance_sync = now
+
+        await self._update_position_gauges()
 
         # 1. Fetch Kalshi markets (throttled separately)
         if now - self._last_market_fetch >= self._kalshi_interval:
@@ -230,6 +253,7 @@ class ScannerEngine:
                     "timestamp": datetime.now(UTC).isoformat(),
                 },
             )
+            scanner_cycles_total.inc()
             return
 
         # 4. Match markets → games
@@ -254,6 +278,7 @@ class ScannerEngine:
                 "timestamp": datetime.now(UTC).isoformat(),
             },
         )
+        scanner_cycles_total.inc()
 
     async def _fetch_all_markets(self):
         """Fetch Kalshi game-winner markets for all sports concurrently."""
@@ -301,6 +326,8 @@ class ScannerEngine:
         leading_team = (
             game.home_team if game.home_team.score > game.away_team.score else game.away_team
         )
+
+        opportunities_found_total.labels(sport=game.sport.value).inc()
 
         await log_scanner(
             "info",

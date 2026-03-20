@@ -12,6 +12,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "cryptography>=43.0.0",
     "websockets>=14.0",
+    "prometheus-client>=0.21.0",
 ]
 
 [build-system]
@@ -23,6 +24,7 @@ packages = ["backend"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 addopts = ""
 

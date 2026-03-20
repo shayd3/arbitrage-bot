@@ -1,8 +1,10 @@
 import logging
+import time
 from datetime import datetime
 
 import httpx
 
+from backend.metrics import espn_poll_latency_seconds
 from backend.models import Game, GameClock, GameStatus, Sport, Team
 from backend.scanner.sports import get_sport_config
 
@@ -115,6 +117,7 @@ async def fetch_games(sport: Sport = Sport.NBA) -> list[Game]:
     regular_periods = sport_config.regular_periods
 
     async with httpx.AsyncClient(timeout=10.0) as client:
+        t0 = time.perf_counter()
         try:
             response = await client.get(url)
             response.raise_for_status()
@@ -122,6 +125,8 @@ async def fetch_games(sport: Sport = Sport.NBA) -> list[Game]:
         except httpx.HTTPError as e:
             logger.error(f"ESPN API error for {sport}: {e}")
             return []
+        finally:
+            espn_poll_latency_seconds.labels(sport=sport.value).observe(time.perf_counter() - t0)
 
     games = []
     for event in data.get("events", []):
