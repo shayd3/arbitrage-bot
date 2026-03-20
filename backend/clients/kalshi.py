@@ -116,9 +116,7 @@ class KalshiClient:
             content=body_str.encode("utf-8") if body_str else None,
             **kwargs,
         )
-        kalshi_api_latency_seconds.labels(endpoint=endpoint_label).observe(
-            time.perf_counter() - t0
-        )
+        kalshi_api_latency_seconds.labels(endpoint=endpoint_label).observe(time.perf_counter() - t0)
         response.raise_for_status()
         return response.json()
 
