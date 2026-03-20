@@ -1,7 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Response, WebSocket
+from fastapi import FastAPI, Header, HTTPException, Response, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
@@ -44,7 +44,11 @@ app.include_router(router)
 
 
 @app.get("/metrics", include_in_schema=False)
-async def metrics():
+async def metrics(authorization: str | None = Header(default=None)):
+    if settings.metrics_token:
+        expected = f"Bearer {settings.metrics_token}"
+        if authorization != expected:
+            raise HTTPException(status_code=401, detail="Unauthorized")
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 

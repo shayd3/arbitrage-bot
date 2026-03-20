@@ -1,5 +1,6 @@
 import base64
 import json
+import re
 import time
 from pathlib import Path
 
@@ -106,17 +107,23 @@ class KalshiClient:
             body_str = json.dumps(kwargs.pop("json"), separators=(",", ":"))
         auth_headers = self._sign_request(method, path, body="")
         headers = {**auth_headers, "Content-Type": "application/json"}
-        # Strip leading path segment for a clean label (e.g. "/portfolio/balance" → "portfolio_balance")
-        endpoint_label = path.strip("/").replace("/", "_")
-        t0 = time.perf_counter()
-        response = await client.request(
-            method,
-            path,
-            headers=headers,
-            content=body_str.encode("utf-8") if body_str else None,
-            **kwargs,
+        # Normalize dynamic path segments (e.g. market tickers) to avoid unbounded label cardinality
+        endpoint_label = (
+            re.sub(r"/markets/[^/]+", "/markets/{ticker}", path).strip("/").replace("/", "_")
         )
-        kalshi_api_latency_seconds.labels(endpoint=endpoint_label).observe(time.perf_counter() - t0)
+        t0 = time.perf_counter()
+        try:
+            response = await client.request(
+                method,
+                path,
+                headers=headers,
+                content=body_str.encode("utf-8") if body_str else None,
+                **kwargs,
+            )
+        finally:
+            kalshi_api_latency_seconds.labels(endpoint=endpoint_label).observe(
+                time.perf_counter() - t0
+            )
         response.raise_for_status()
         return response.json()
 

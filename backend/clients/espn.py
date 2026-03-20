@@ -117,15 +117,16 @@ async def fetch_games(sport: Sport = Sport.NBA) -> list[Game]:
     regular_periods = sport_config.regular_periods
 
     async with httpx.AsyncClient(timeout=10.0) as client:
+        t0 = time.perf_counter()
         try:
-            t0 = time.perf_counter()
             response = await client.get(url)
-            espn_poll_latency_seconds.labels(sport=sport.value).observe(time.perf_counter() - t0)
             response.raise_for_status()
             data = response.json()
         except httpx.HTTPError as e:
             logger.error(f"ESPN API error for {sport}: {e}")
             return []
+        finally:
+            espn_poll_latency_seconds.labels(sport=sport.value).observe(time.perf_counter() - t0)
 
     games = []
     for event in data.get("events", []):

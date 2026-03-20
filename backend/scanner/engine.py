@@ -1,19 +1,20 @@
 import asyncio
 import logging
 import time
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 
 from backend.api.websocket import manager
 from backend.clients.espn import fetch_games
 from backend.clients.kalshi import kalshi_client
 from backend.config import settings
 from backend.db import (
+    count_active_positions,
     get_config_override,
     get_filled_trades,
-    get_trades,
     insert_balance,
     log_scanner,
     settle_trade,
+    sum_daily_pnl,
     sync_trade_from_order,
 )
 from backend.metrics import (
@@ -161,6 +162,7 @@ class ScannerEngine:
         while self._running:
             try:
                 await self._scan()
+                scanner_cycles_total.inc()
             except asyncio.CancelledError:
                 raise
             except Exception as e:
@@ -189,22 +191,16 @@ class ScannerEngine:
     async def _update_position_gauges(self):
         """Refresh active_positions and daily_pnl gauges from the DB."""
         try:
-            trades = await get_trades(limit=500)
-            open_count = sum(1 for t in trades if t["status"] in ("pending", "filled"))
+            open_count = await count_active_positions()
             active_positions.set(open_count)
-            today = date.today().isoformat()
-            today_pnl = sum(
-                t["pnl"]
-                for t in trades
-                if t["created_at"].startswith(today) and t["pnl"] is not None
-            )
+            today = datetime.now(UTC).date()
+            today_pnl = await sum_daily_pnl(today)
             daily_pnl.set(today_pnl)
         except Exception as e:
             logger.warning(f"Failed to update position gauges: {e}")
 
     async def _scan(self):
         await self._refresh_intervals()
-        scanner_cycles_total.inc()
         now = time.monotonic()
 
         # Sync orders from Kalshi (reconcile DB with remote state)

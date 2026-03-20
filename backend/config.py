@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     espn_poll_interval: float = 10.0  # seconds
     kalshi_poll_interval: float = 15.0  # seconds
 
+    # Observability — set to gate /metrics behind a static bearer token (empty = open)
+    metrics_token: str = ""
+
     @property
     def kalshi_base_url(self) -> str:
         if self.kalshi_use_demo:
