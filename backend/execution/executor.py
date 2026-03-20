@@ -1,10 +1,12 @@
 import logging
-from backend.execution.risk import pre_trade_checks, RiskError
+from datetime import UTC, datetime
+
 from backend.db import insert_trade, log_scanner
-from backend.models import Trade, TradeStatus, MarketSide
-from datetime import datetime, timezone
+from backend.execution.risk import RiskError, pre_trade_checks
+from backend.models import MarketSide, Trade, TradeStatus
 
 logger = logging.getLogger(__name__)
+
 
 class Executor:
     async def execute(
@@ -28,10 +30,10 @@ class Executor:
         await self._place_live_order(ticker, side, contracts, price, game_id, reason)
 
     async def _place_live_order(
-        self, ticker: str, side: str, contracts: int, price: int,
-        game_id: str | None, reason: str
+        self, ticker: str, side: str, contracts: int, price: int, game_id: str | None, reason: str
     ):
         from backend.clients.kalshi import kalshi_client
+
         try:
             order = await kalshi_client.create_order(ticker, side, contracts, price)
             order_id = order.get("order_id") or order.get("id")
@@ -43,30 +45,46 @@ class Executor:
                 contracts=contracts,
                 price=price,
                 status=TradeStatus.FILLED,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
                 game_id=game_id,
             )
             trade_id = await insert_trade(trade)
 
-            await log_scanner("info", f"Order placed: {order_id}", {
-                "trade_id": trade_id, "order_id": order_id, "ticker": ticker,
-                "side": side, "contracts": contracts, "price": price, "reason": reason,
-            })
+            await log_scanner(
+                "info",
+                f"Order placed: {order_id}",
+                {
+                    "trade_id": trade_id,
+                    "order_id": order_id,
+                    "ticker": ticker,
+                    "side": side,
+                    "contracts": contracts,
+                    "price": price,
+                    "reason": reason,
+                },
+            )
 
             from backend.api.websocket import manager
-            await manager.broadcast("trade", {
-                "id": trade_id,
-                "order_id": order_id,
-                "ticker": ticker,
-                "side": side,
-                "contracts": contracts,
-                "price": price,
-                "reason": reason,
-            })
 
-            logger.info(f"Order placed: {order_id} | {side.upper()} {contracts}x {ticker} @ {price}¢")
+            await manager.broadcast(
+                "trade",
+                {
+                    "id": trade_id,
+                    "order_id": order_id,
+                    "ticker": ticker,
+                    "side": side,
+                    "contracts": contracts,
+                    "price": price,
+                    "reason": reason,
+                },
+            )
+
+            logger.info(
+                f"Order placed: {order_id} | {side.upper()} {contracts}x {ticker} @ {price}¢"
+            )
         except Exception as e:
             logger.error(f"Failed to place order: {e}", exc_info=True)
             await log_scanner("error", f"Order failed for {ticker}: {e}")
+
 
 executor = Executor()

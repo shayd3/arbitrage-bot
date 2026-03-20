@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -20,5 +21,6 @@ class Settings(BaseSettings):
         if self.kalshi_use_demo:
             return "https://demo-api.kalshi.co/trade-api/v2"
         return "https://api.kalshi.co/trade-api/v2"
+
 
 settings = Settings()

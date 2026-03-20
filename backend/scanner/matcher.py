@@ -2,8 +2,10 @@
 Match ESPN game objects to Kalshi market tickers.
 Uses static alias lookup for safety (no fuzzy matching on financial data).
 """
+
 import re
-from datetime import timezone
+from datetime import UTC
+
 from backend.models import Game, KalshiMarket, Sport
 
 # Team name aliases → canonical abbreviation used in Kalshi tickers
@@ -328,25 +330,30 @@ SPORT_TICKER_PREFIX: dict[Sport, list[str]] = {
     Sport.CBB: ["KXCBBGAME", "KXCBB", "CBB"],
 }
 
+
 def normalize_team_name(name: str) -> str:
     """Normalize a team name to lowercase for alias lookup."""
     return name.lower().strip()
+
 
 def team_to_kalshi_abbrev(team_name: str, sport: Sport) -> str | None:
     """Look up Kalshi ticker abbreviation for a team name within a sport."""
     sport_aliases = TEAM_ALIASES.get(sport, {})
     return sport_aliases.get(normalize_team_name(team_name))
 
+
 def _ticker_contains_team(ticker: str, abbrev: str) -> bool:
     """Check if a Kalshi ticker contains a team abbreviation."""
     ticker_upper = ticker.upper()
     abbrev_upper = abbrev.upper()
     # Match patterns like -LAL-, _LAL_, LALNBA, etc.
-    return bool(re.search(r'[-_]?' + re.escape(abbrev_upper) + r'[-_]?', ticker_upper))
+    return bool(re.search(r"[-_]?" + re.escape(abbrev_upper) + r"[-_]?", ticker_upper))
+
 
 # Max seconds between game start_time and market close_time to be considered
 # the same game. Game winner markets close at tipoff, so this should be tight.
 _GAME_TIME_TOLERANCE_SECS = 8 * 3600  # 8 hours
+
 
 def match_game_to_markets(game: Game, markets: list[KalshiMarket]) -> list[KalshiMarket]:
     """
@@ -392,9 +399,9 @@ def match_game_to_markets(game: Game, markets: list[KalshiMarket]) -> list[Kalsh
             market_close = market.close_time
             # Normalise to UTC-aware for comparison
             if game_start.tzinfo is None:
-                game_start = game_start.replace(tzinfo=timezone.utc)
+                game_start = game_start.replace(tzinfo=UTC)
             if market_close.tzinfo is None:
-                market_close = market_close.replace(tzinfo=timezone.utc)
+                market_close = market_close.replace(tzinfo=UTC)
             diff = abs((market_close - game_start).total_seconds())
             if diff > _GAME_TIME_TOLERANCE_SECS:
                 continue
@@ -402,6 +409,7 @@ def match_game_to_markets(game: Game, markets: list[KalshiMarket]) -> list[Kalsh
         results.append(market)
 
     return results
+
 
 OPEN_STATUSES = {"open", "active"}
 
@@ -441,6 +449,7 @@ def match_markets_to_games(
 
 class GameMarketMatch:
     """Represents a matched game + market pair."""
+
     def __init__(self, game: Game, market: KalshiMarket, home_team_wins: bool):
         self.game = game
         self.market = market
@@ -453,7 +462,7 @@ class GameMarketMatch:
         if home_leading == self.home_team_wins:
             return self.market.yes_ask  # YES = leading team
         else:
-            return self.market.no_ask   # Leading team is NO
+            return self.market.no_ask  # Leading team is NO
 
     @property
     def lead(self) -> int:

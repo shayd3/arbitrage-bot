@@ -1,8 +1,9 @@
-import httpx
 import logging
 from datetime import datetime
-from typing import Optional
-from backend.models import Game, Team, GameClock, GameStatus, Sport
+
+import httpx
+
+from backend.models import Game, GameClock, GameStatus, Sport, Team
 from backend.scanner.sports import get_sport_config
 
 logger = logging.getLogger(__name__)
@@ -16,7 +17,8 @@ ESPN_ENDPOINTS = {
     Sport.CBB: "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard",
 }
 
-def _parse_clock(competition: dict, regular_periods: int) -> Optional[GameClock]:
+
+def _parse_clock(competition: dict, regular_periods: int) -> GameClock | None:
     status = competition.get("status", {})
     period = status.get("period", 0)
     display_clock = status.get("displayClock", "0:00")
@@ -38,6 +40,7 @@ def _parse_clock(competition: dict, regular_periods: int) -> Optional[GameClock]
         seconds_remaining=seconds,
     )
 
+
 def _parse_game_status(competition: dict) -> GameStatus:
     state = competition.get("status", {}).get("type", {}).get("state", "")
     if state == "in":
@@ -46,7 +49,8 @@ def _parse_game_status(competition: dict) -> GameStatus:
         return GameStatus.FINAL
     return GameStatus.SCHEDULED
 
-def _parse_competition(competition: dict, sport: Sport, regular_periods: int) -> Optional[Game]:
+
+def _parse_competition(competition: dict, sport: Sport, regular_periods: int) -> Game | None:
     try:
         competitors = competition.get("competitors", [])
         if len(competitors) < 2:
@@ -69,7 +73,9 @@ def _parse_competition(competition: dict, sport: Sport, regular_periods: int) ->
         )
 
         status = _parse_game_status(competition)
-        clock = _parse_clock(competition, regular_periods) if status == GameStatus.IN_PROGRESS else None
+        clock = (
+            _parse_clock(competition, regular_periods) if status == GameStatus.IN_PROGRESS else None
+        )
 
         # Parse start time
         start_time = None
@@ -99,6 +105,7 @@ def _parse_competition(competition: dict, sport: Sport, regular_periods: int) ->
         logger.warning(f"Failed to parse competition: {e}")
         return None
 
+
 async def fetch_games(sport: Sport = Sport.NBA) -> list[Game]:
     url = ESPN_ENDPOINTS.get(sport)
     if not url:
@@ -124,4 +131,3 @@ async def fetch_games(sport: Sport = Sport.NBA) -> list[Game]:
                 games.append(game)
 
     return games
-

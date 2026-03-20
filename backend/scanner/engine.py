@@ -1,17 +1,26 @@
 import asyncio
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
+from backend.api.websocket import manager
 from backend.clients.espn import fetch_games
 from backend.clients.kalshi import kalshi_client
-from backend.models import Game, GameStatus, KalshiMarket, Sport, Balance
-from backend.scanner.matcher import match_markets_to_games
-from backend.scanner.sports import get_sport_config, SPORT_SERIES_TICKER
-from backend.db import log_scanner, insert_balance, get_filled_trades, settle_trade, sync_trade_from_order, get_config_override
 from backend.config import settings
-from backend.api.websocket import manager
+from backend.db import (
+    get_config_override,
+    get_filled_trades,
+    insert_balance,
+    log_scanner,
+    settle_trade,
+    sync_trade_from_order,
+)
+from backend.models import Balance, Game, GameStatus, KalshiMarket, Sport
+from backend.scanner.matcher import match_markets_to_games
+from backend.scanner.sports import SPORT_SERIES_TICKER, get_sport_config
 
 logger = logging.getLogger(__name__)
+
 
 async def sync_trades_from_kalshi():
     """
@@ -28,11 +37,13 @@ async def sync_trades_from_kalshi():
             synced += 1
         if synced:
             from backend.db import get_db
+
             db = await get_db()
             await db.commit()
             logger.debug(f"Synced {synced} orders from Kalshi")
     except Exception as e:
         logger.error(f"Trade sync error: {e}", exc_info=True)
+
 
 async def check_settlements():
     """
@@ -56,7 +67,7 @@ async def check_settlements():
         if not settled_map:
             return
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         for trade in trades:
             result = settled_map.get(trade["ticker"])
             if not result:
@@ -73,30 +84,38 @@ async def check_settlements():
                 f"Settled trade {trade['id']} ({trade['ticker']}): "
                 f"side={trade['side']}, result={result}, pnl=${pnl:.2f}"
             )
-            await log_scanner("info", f"Trade {trade['id']} settled", {
-                "trade_id": trade["id"],
-                "ticker": trade["ticker"],
-                "side": trade["side"],
-                "result": result,
-                "pnl": pnl,
-            })
+            await log_scanner(
+                "info",
+                f"Trade {trade['id']} settled",
+                {
+                    "trade_id": trade["id"],
+                    "ticker": trade["ticker"],
+                    "side": trade["side"],
+                    "result": result,
+                    "pnl": pnl,
+                },
+            )
     except Exception as e:
         logger.error(f"Settlement check error: {e}", exc_info=True)
+
 
 async def sync_balance():
     """Fetch Kalshi balance and store in DB so risk checks have current data."""
     try:
         cents = await kalshi_client.get_balance()
         available = int(cents) / 100
-        await insert_balance(Balance(
-            timestamp=datetime.now(timezone.utc),
-            available=available,
-            portfolio_value=0.0,
-            total=available,
-        ))
+        await insert_balance(
+            Balance(
+                timestamp=datetime.now(UTC),
+                available=available,
+                portfolio_value=0.0,
+                total=available,
+            )
+        )
         logger.info(f"Synced balance: ${available:.2f}")
     except Exception as e:
         logger.warning(f"Failed to sync balance: {e}")
+
 
 class ScannerEngine:
     def __init__(self):
@@ -143,12 +162,17 @@ class ScannerEngine:
     async def _refresh_intervals(self):
         """Read dynamic scan intervals from the config_overrides table."""
         import json
+
         val = await get_config_override("scanner_intervals")
         if val:
             try:
                 d = json.loads(val)
-                self._espn_interval = max(5.0, float(d.get("espn_poll_interval", settings.espn_poll_interval)))
-                self._kalshi_interval = max(10.0, float(d.get("kalshi_poll_interval", settings.kalshi_poll_interval)))
+                self._espn_interval = max(
+                    5.0, float(d.get("espn_poll_interval", settings.espn_poll_interval))
+                )
+                self._kalshi_interval = max(
+                    10.0, float(d.get("kalshi_poll_interval", settings.kalshi_poll_interval))
+                )
                 self._sync_interval = max(30.0, float(d.get("kalshi_sync_interval", 1800.0)))
             except (json.JSONDecodeError, ValueError, TypeError):
                 pass
@@ -187,14 +211,10 @@ class ScannerEngine:
 
         # 3. Fetch ESPN scoreboards for sports with open markets, or all sports as fallback
         sports_to_fetch = sports_with_markets if sports_with_markets else set(Sport)
-        espn_tasks = {
-            sport: fetch_games(sport) for sport in sports_to_fetch
-        }
-        espn_results = await asyncio.gather(
-            *espn_tasks.values(), return_exceptions=True
-        )
+        espn_tasks = {sport: fetch_games(sport) for sport in sports_to_fetch}
+        espn_results = await asyncio.gather(*espn_tasks.values(), return_exceptions=True)
         all_games: list[Game] = []
-        for sport, result in zip(espn_tasks.keys(), espn_results):
+        for sport, result in zip(espn_tasks.keys(), espn_results, strict=False):
             if isinstance(result, Exception):
                 logger.warning(f"Failed to fetch ESPN {sport.value} games: {result}")
             else:
@@ -203,10 +223,13 @@ class ScannerEngine:
         self._games = all_games
 
         if not sports_with_markets:
-            await manager.broadcast("games_update", {
-                "games": [g.model_dump(mode="json") for g in all_games],
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            })
+            await manager.broadcast(
+                "games_update",
+                {
+                    "games": [g.model_dump(mode="json") for g in all_games],
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+            )
             return
 
         # 4. Match markets → games
@@ -224,13 +247,17 @@ class ScannerEngine:
             await self._process_game_markets(game, matched_markets)
 
         # 6. Broadcast all games to dashboard
-        await manager.broadcast("games_update", {
-            "games": [g.model_dump(mode="json") for g in all_games],
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        await manager.broadcast(
+            "games_update",
+            {
+                "games": [g.model_dump(mode="json") for g in all_games],
+                "timestamp": datetime.now(UTC).isoformat(),
+            },
+        )
 
     async def _fetch_all_markets(self):
         """Fetch Kalshi game-winner markets for all sports concurrently."""
+
         async def _fetch_sport(sport: Sport, series_ticker: str):
             try:
                 return sport, await kalshi_client.get_markets(
@@ -240,10 +267,7 @@ class ScannerEngine:
                 logger.warning(f"Failed to fetch {sport.value} markets: {e}")
                 return sport, None
 
-        tasks = [
-            _fetch_sport(sport, ticker)
-            for sport, ticker in SPORT_SERIES_TICKER.items()
-        ]
+        tasks = [_fetch_sport(sport, ticker) for sport, ticker in SPORT_SERIES_TICKER.items()]
         results = await asyncio.gather(*tasks)
         for sport, markets in results:
             if markets is not None:
@@ -275,37 +299,45 @@ class ScannerEngine:
             return
 
         leading_team = (
-            game.home_team if game.home_team.score > game.away_team.score
-            else game.away_team
+            game.home_team if game.home_team.score > game.away_team.score else game.away_team
         )
 
-        await log_scanner("info", f"Opportunity detected: {game.id}", {
-            "game_id": game.id,
-            "home": game.home_team.name,
-            "away": game.away_team.name,
-            "home_score": game.home_team.score,
-            "away_score": game.away_team.score,
-            "lead": lead,
-            "period": clock.period,
-            "clock": clock.display_clock,
-            "matched_markets": [m.ticker for m in markets],
-        })
+        await log_scanner(
+            "info",
+            f"Opportunity detected: {game.id}",
+            {
+                "game_id": game.id,
+                "home": game.home_team.name,
+                "away": game.away_team.name,
+                "home_score": game.home_team.score,
+                "away_score": game.away_team.score,
+                "lead": lead,
+                "period": clock.period,
+                "clock": clock.display_clock,
+                "matched_markets": [m.ticker for m in markets],
+            },
+        )
 
-        await manager.broadcast("opportunity", {
-            "game_id": game.id,
-            "leading_team": leading_team.name,
-            "lead": lead,
-            "clock": clock.display_clock,
-            "period": clock.period,
-            "markets": [m.model_dump(mode="json") for m in markets],
-        })
+        await manager.broadcast(
+            "opportunity",
+            {
+                "game_id": game.id,
+                "leading_team": leading_team.name,
+                "lead": lead,
+                "clock": clock.display_clock,
+                "period": clock.period,
+                "markets": [m.model_dump(mode="json") for m in markets],
+            },
+        )
 
         from backend.strategy.evaluator import evaluator
+
         for market in markets:
             await evaluator.evaluate(game, market, config)
 
     @property
     def games(self) -> list[Game]:
         return self._games
+
 
 scanner = ScannerEngine()

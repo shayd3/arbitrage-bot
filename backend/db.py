@@ -1,9 +1,9 @@
+from datetime import UTC, datetime
+
 import aiosqlite
-import asyncio
-from datetime import datetime, timezone
-from pathlib import Path
+
 from backend.config import settings
-from backend.models import Trade, Balance, TradeStatus, MarketSide
+from backend.models import Balance, Trade
 
 CREATE_TABLES = """
 CREATE TABLE IF NOT EXISTS markets (
@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS scanner_log (
 
 _db: aiosqlite.Connection | None = None
 
+
 async def get_db() -> aiosqlite.Connection:
     global _db
     if _db is None:
@@ -77,59 +78,69 @@ async def get_db() -> aiosqlite.Connection:
         await _db.commit()
     return _db
 
+
 async def close_db():
     global _db
     if _db:
         await _db.close()
         _db = None
 
+
 async def insert_trade(trade: Trade) -> int:
     db = await get_db()
     cursor = await db.execute(
         """INSERT INTO trades (kalshi_order_id, ticker, side, contracts, price, status, pnl, created_at, game_id)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (trade.kalshi_order_id, trade.ticker, trade.side.value, trade.contracts,
-         trade.price, trade.status.value, trade.pnl,
-         (trade.created_at or datetime.now(timezone.utc)).isoformat(), trade.game_id)
+        (
+            trade.kalshi_order_id,
+            trade.ticker,
+            trade.side.value,
+            trade.contracts,
+            trade.price,
+            trade.status.value,
+            trade.pnl,
+            (trade.created_at or datetime.now(UTC)).isoformat(),
+            trade.game_id,
+        ),
     )
     await db.commit()
     return cursor.lastrowid
+
 
 async def get_trades(limit: int = 100) -> list[dict]:
     db = await get_db()
     # Filter out legacy simulated rows (pre-migration rows with no real Kalshi order ID)
     cursor = await db.execute(
         "SELECT * FROM trades WHERE kalshi_order_id IS NOT NULL ORDER BY created_at DESC LIMIT ?",
-        (limit,)
+        (limit,),
     )
     rows = await cursor.fetchall()
     return [dict(r) for r in rows]
+
 
 async def insert_balance(balance: Balance):
     db = await get_db()
     await db.execute(
         """INSERT INTO balances (timestamp, available, portfolio_value, total)
            VALUES (?, ?, ?, ?)""",
-        (balance.timestamp.isoformat(), balance.available, balance.portfolio_value, balance.total)
+        (balance.timestamp.isoformat(), balance.available, balance.portfolio_value, balance.total),
     )
     await db.commit()
 
+
 async def get_latest_balance() -> dict | None:
     db = await get_db()
-    cursor = await db.execute(
-        "SELECT * FROM balances ORDER BY timestamp DESC LIMIT 1"
-    )
+    cursor = await db.execute("SELECT * FROM balances ORDER BY timestamp DESC LIMIT 1")
     row = await cursor.fetchone()
     return dict(row) if row else None
 
+
 async def get_balance_history(limit: int = 100) -> list[dict]:
     db = await get_db()
-    cursor = await db.execute(
-        "SELECT * FROM balances ORDER BY timestamp DESC LIMIT ?",
-        (limit,)
-    )
+    cursor = await db.execute("SELECT * FROM balances ORDER BY timestamp DESC LIMIT ?", (limit,))
     rows = await cursor.fetchall()
     return [dict(r) for r in rows]
+
 
 async def sync_trade_from_order(order: dict, *, commit: bool = True):
     """
@@ -166,7 +177,7 @@ async def sync_trade_from_order(order: dict, *, commit: bool = True):
     else:
         status = "pending"
 
-    created_time = order.get("created_time") or datetime.now(timezone.utc).isoformat()
+    created_time = order.get("created_time") or datetime.now(UTC).isoformat()
 
     db = await get_db()
     existing = await db.execute(
@@ -180,7 +191,7 @@ async def sync_trade_from_order(order: dict, *, commit: bool = True):
             await db.execute(
                 """INSERT INTO trades (kalshi_order_id, ticker, side, contracts, price, status, created_at)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (order_id, ticker, side, contracts, price, status, created_time)
+                (order_id, ticker, side, contracts, price, status, created_time),
             )
     else:
         # Update status if it has advanced (avoid going backwards)
@@ -188,40 +199,40 @@ async def sync_trade_from_order(order: dict, *, commit: bool = True):
         current_rank = STATUS_RANK.get(row["status"], 0)
         new_rank = STATUS_RANK.get(status, 0)
         if new_rank > current_rank:
-            await db.execute(
-                "UPDATE trades SET status = ? WHERE id = ?",
-                (status, row["id"])
-            )
+            await db.execute("UPDATE trades SET status = ? WHERE id = ?", (status, row["id"]))
 
     if commit:
         await db.commit()
 
+
 async def get_filled_trades() -> list[dict]:
     """Return all trades with status='filled' — candidates for settlement checking."""
     db = await get_db()
-    cursor = await db.execute(
-        "SELECT * FROM trades WHERE status = 'filled'"
-    )
+    cursor = await db.execute("SELECT * FROM trades WHERE status = 'filled'")
     rows = await cursor.fetchall()
     return [dict(r) for r in rows]
+
 
 async def settle_trade(trade_id: int, pnl: float, settled_at: datetime):
     """Mark a trade as settled with its P&L."""
     db = await get_db()
     await db.execute(
         "UPDATE trades SET status = 'settled', pnl = ?, settled_at = ? WHERE id = ?",
-        (pnl, settled_at.isoformat(), trade_id)
+        (pnl, settled_at.isoformat(), trade_id),
     )
     await db.commit()
 
+
 async def log_scanner(level: str, message: str, data: dict | None = None):
     import json
+
     db = await get_db()
     await db.execute(
         "INSERT INTO scanner_log (level, message, data_json, created_at) VALUES (?, ?, ?, ?)",
-        (level, message, json.dumps(data) if data else None, datetime.now(timezone.utc).isoformat())
+        (level, message, json.dumps(data) if data else None, datetime.now(UTC).isoformat()),
     )
     await db.commit()
+
 
 async def get_config_override(key: str) -> str | None:
     db = await get_db()
@@ -229,11 +240,12 @@ async def get_config_override(key: str) -> str | None:
     row = await cursor.fetchone()
     return row[0] if row else None
 
+
 async def set_config_override(key: str, value: str):
     db = await get_db()
     await db.execute(
         """INSERT INTO config_overrides (key, value, updated_at) VALUES (?, ?, ?)
            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at""",
-        (key, value, datetime.now(timezone.utc).isoformat())
+        (key, value, datetime.now(UTC).isoformat()),
     )
     await db.commit()

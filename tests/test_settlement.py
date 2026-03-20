@@ -1,6 +1,8 @@
 """Tests for settlement detection in backend/scanner/engine.py."""
+
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, call
 
 from backend.scanner.engine import check_settlements
 
@@ -17,11 +19,14 @@ def make_settlement(ticker="KXNBA-LAL", result="yes"):
 # Early-exit cases
 # ---------------------------------------------------------------------------
 
+
 class TestCheckSettlementsEarlyExit:
     async def test_no_filled_trades_skips_api_call(self):
         with (
             patch("backend.scanner.engine.get_filled_trades", new=AsyncMock(return_value=[])),
-            patch("backend.scanner.engine.kalshi_client.get_settlements", new=AsyncMock()) as mock_api,
+            patch(
+                "backend.scanner.engine.kalshi_client.get_settlements", new=AsyncMock()
+            ) as mock_api,
         ):
             await check_settlements()
         mock_api.assert_not_called()
@@ -31,7 +36,10 @@ class TestCheckSettlementsEarlyExit:
         settle_mock = AsyncMock()
         with (
             patch("backend.scanner.engine.get_filled_trades", new=AsyncMock(return_value=trades)),
-            patch("backend.scanner.engine.kalshi_client.get_settlements", new=AsyncMock(return_value=[])),
+            patch(
+                "backend.scanner.engine.kalshi_client.get_settlements",
+                new=AsyncMock(return_value=[]),
+            ),
             patch("backend.scanner.engine.settle_trade", new=settle_mock),
         ):
             await check_settlements()
@@ -42,9 +50,10 @@ class TestCheckSettlementsEarlyExit:
         settle_mock = AsyncMock()
         with (
             patch("backend.scanner.engine.get_filled_trades", new=AsyncMock(return_value=trades)),
-            patch("backend.scanner.engine.kalshi_client.get_settlements", new=AsyncMock(return_value=[
-                {"market_ticker": "KXNBA-LAL", "market_result": ""}
-            ])),
+            patch(
+                "backend.scanner.engine.kalshi_client.get_settlements",
+                new=AsyncMock(return_value=[{"market_ticker": "KXNBA-LAL", "market_result": ""}]),
+            ),
             patch("backend.scanner.engine.settle_trade", new=settle_mock),
         ):
             await check_settlements()
@@ -55,12 +64,16 @@ class TestCheckSettlementsEarlyExit:
 # P&L calculation — YES side
 # ---------------------------------------------------------------------------
 
+
 class TestSettlementPnlYesSide:
     async def _run(self, trade, settlement):
         settle_mock = AsyncMock()
         with (
             patch("backend.scanner.engine.get_filled_trades", new=AsyncMock(return_value=[trade])),
-            patch("backend.scanner.engine.kalshi_client.get_settlements", new=AsyncMock(return_value=[settlement])),
+            patch(
+                "backend.scanner.engine.kalshi_client.get_settlements",
+                new=AsyncMock(return_value=[settlement]),
+            ),
             patch("backend.scanner.engine.settle_trade", new=settle_mock),
             patch("backend.scanner.engine.log_scanner", new=AsyncMock()),
         ):
@@ -92,12 +105,16 @@ class TestSettlementPnlYesSide:
 # P&L calculation — NO side
 # ---------------------------------------------------------------------------
 
+
 class TestSettlementPnlNoSide:
     async def _run(self, trade, settlement):
         settle_mock = AsyncMock()
         with (
             patch("backend.scanner.engine.get_filled_trades", new=AsyncMock(return_value=[trade])),
-            patch("backend.scanner.engine.kalshi_client.get_settlements", new=AsyncMock(return_value=[settlement])),
+            patch(
+                "backend.scanner.engine.kalshi_client.get_settlements",
+                new=AsyncMock(return_value=[settlement]),
+            ),
             patch("backend.scanner.engine.settle_trade", new=settle_mock),
             patch("backend.scanner.engine.log_scanner", new=AsyncMock()),
         ):
@@ -129,15 +146,21 @@ class TestSettlementPnlNoSide:
 # Ticker matching
 # ---------------------------------------------------------------------------
 
+
 class TestSettlementMatching:
     async def test_unmatched_ticker_not_settled(self):
         trades = [make_trade(ticker="KXNBA-LAL")]
         settle_mock = AsyncMock()
         with (
             patch("backend.scanner.engine.get_filled_trades", new=AsyncMock(return_value=trades)),
-            patch("backend.scanner.engine.kalshi_client.get_settlements", new=AsyncMock(return_value=[
-                make_settlement(ticker="KXNBA-BOS", result="yes"),
-            ])),
+            patch(
+                "backend.scanner.engine.kalshi_client.get_settlements",
+                new=AsyncMock(
+                    return_value=[
+                        make_settlement(ticker="KXNBA-BOS", result="yes"),
+                    ]
+                ),
+            ),
             patch("backend.scanner.engine.settle_trade", new=settle_mock),
         ):
             await check_settlements()
@@ -151,9 +174,14 @@ class TestSettlementMatching:
         settle_mock = AsyncMock()
         with (
             patch("backend.scanner.engine.get_filled_trades", new=AsyncMock(return_value=trades)),
-            patch("backend.scanner.engine.kalshi_client.get_settlements", new=AsyncMock(return_value=[
-                make_settlement(ticker="KXNBA-LAL", result="yes"),
-            ])),
+            patch(
+                "backend.scanner.engine.kalshi_client.get_settlements",
+                new=AsyncMock(
+                    return_value=[
+                        make_settlement(ticker="KXNBA-LAL", result="yes"),
+                    ]
+                ),
+            ),
             patch("backend.scanner.engine.settle_trade", new=settle_mock),
             patch("backend.scanner.engine.log_scanner", new=AsyncMock()),
         ):
@@ -166,9 +194,14 @@ class TestSettlementMatching:
         settle_mock = AsyncMock()
         with (
             patch("backend.scanner.engine.get_filled_trades", new=AsyncMock(return_value=trades)),
-            patch("backend.scanner.engine.kalshi_client.get_settlements", new=AsyncMock(return_value=[
-                {"ticker": "KXNBA-LAL", "result": "yes"},
-            ])),
+            patch(
+                "backend.scanner.engine.kalshi_client.get_settlements",
+                new=AsyncMock(
+                    return_value=[
+                        {"ticker": "KXNBA-LAL", "result": "yes"},
+                    ]
+                ),
+            ),
             patch("backend.scanner.engine.settle_trade", new=settle_mock),
             patch("backend.scanner.engine.log_scanner", new=AsyncMock()),
         ):
@@ -181,9 +214,14 @@ class TestSettlementMatching:
         settle_mock = AsyncMock()
         with (
             patch("backend.scanner.engine.get_filled_trades", new=AsyncMock(return_value=trades)),
-            patch("backend.scanner.engine.kalshi_client.get_settlements", new=AsyncMock(return_value=[
-                {"market_ticker": "KXNBA-LAL", "market_result": "Yes"},
-            ])),
+            patch(
+                "backend.scanner.engine.kalshi_client.get_settlements",
+                new=AsyncMock(
+                    return_value=[
+                        {"market_ticker": "KXNBA-LAL", "market_result": "Yes"},
+                    ]
+                ),
+            ),
             patch("backend.scanner.engine.settle_trade", new=settle_mock),
             patch("backend.scanner.engine.log_scanner", new=AsyncMock()),
         ):
