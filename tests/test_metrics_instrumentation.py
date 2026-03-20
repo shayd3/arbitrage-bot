@@ -2,7 +2,6 @@
 and API clients.  Checks that counters/gauges/histograms change by the expected delta
 so tests remain independent of global registry state."""
 
-from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -173,24 +172,14 @@ class TestSyncBalanceGauge:
 
 
 class TestUpdatePositionGauges:
-    def _make_trade(self, status="filled", pnl=None, created_at=None):
-        today = date.today().isoformat()
-        return {
-            "status": status,
-            "pnl": pnl,
-            "created_at": created_at or f"{today}T12:00:00",
-        }
-
     async def test_active_positions_counts_open_statuses(self):
         from backend.scanner.engine import ScannerEngine
 
         engine = ScannerEngine()
-        trades = [
-            self._make_trade(status="filled"),
-            self._make_trade(status="pending"),
-            self._make_trade(status="settled"),  # should not count
-        ]
-        with patch("backend.scanner.engine.get_trades", new=AsyncMock(return_value=trades)):
+        with (
+            patch("backend.scanner.engine.count_active_positions", new=AsyncMock(return_value=2)),
+            patch("backend.scanner.engine.sum_daily_pnl", new=AsyncMock(return_value=0.0)),
+        ):
             await engine._update_position_gauges()
 
         assert _gauge_value(metrics.active_positions) == 2
@@ -199,13 +188,10 @@ class TestUpdatePositionGauges:
         from backend.scanner.engine import ScannerEngine
 
         engine = ScannerEngine()
-        today = date.today().isoformat()
-        trades = [
-            self._make_trade(pnl=20.0, created_at=f"{today}T10:00:00"),
-            self._make_trade(pnl=-5.0, created_at=f"{today}T11:00:00"),
-            self._make_trade(pnl=10.0, created_at="2020-01-01T10:00:00"),  # yesterday, ignored
-        ]
-        with patch("backend.scanner.engine.get_trades", new=AsyncMock(return_value=trades)):
+        with (
+            patch("backend.scanner.engine.count_active_positions", new=AsyncMock(return_value=0)),
+            patch("backend.scanner.engine.sum_daily_pnl", new=AsyncMock(return_value=15.0)),
+        ):
             await engine._update_position_gauges()
 
         assert _gauge_value(metrics.daily_pnl) == pytest.approx(15.0)
@@ -214,12 +200,10 @@ class TestUpdatePositionGauges:
         from backend.scanner.engine import ScannerEngine
 
         engine = ScannerEngine()
-        today = date.today().isoformat()
-        trades = [
-            self._make_trade(pnl=None, created_at=f"{today}T10:00:00"),
-            self._make_trade(pnl=30.0, created_at=f"{today}T11:00:00"),
-        ]
-        with patch("backend.scanner.engine.get_trades", new=AsyncMock(return_value=trades)):
+        with (
+            patch("backend.scanner.engine.count_active_positions", new=AsyncMock(return_value=0)),
+            patch("backend.scanner.engine.sum_daily_pnl", new=AsyncMock(return_value=30.0)),
+        ):
             await engine._update_position_gauges()
 
         assert _gauge_value(metrics.daily_pnl) == pytest.approx(30.0)
@@ -229,7 +213,7 @@ class TestUpdatePositionGauges:
 
         engine = ScannerEngine()
         with patch(
-            "backend.scanner.engine.get_trades",
+            "backend.scanner.engine.count_active_positions",
             new=AsyncMock(side_effect=Exception("db error")),
         ):
             await engine._update_position_gauges()  # should not raise

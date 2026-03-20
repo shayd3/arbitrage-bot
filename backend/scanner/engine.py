@@ -162,7 +162,6 @@ class ScannerEngine:
         while self._running:
             try:
                 await self._scan()
-                scanner_cycles_total.inc()
             except asyncio.CancelledError:
                 raise
             except Exception as e:
@@ -254,6 +253,7 @@ class ScannerEngine:
                     "timestamp": datetime.now(UTC).isoformat(),
                 },
             )
+            scanner_cycles_total.inc()
             return
 
         # 4. Match markets → games
@@ -278,6 +278,7 @@ class ScannerEngine:
                 "timestamp": datetime.now(UTC).isoformat(),
             },
         )
+        scanner_cycles_total.inc()
 
     async def _fetch_all_markets(self):
         """Fetch Kalshi game-winner markets for all sports concurrently."""
