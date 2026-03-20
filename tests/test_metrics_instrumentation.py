@@ -363,13 +363,18 @@ class TestEspnLatencyHistogram:
         mock_response.raise_for_status = MagicMock()
         mock_response.json.return_value = {"events": []}
 
+        mock_http = AsyncMock()
+        mock_http.get = AsyncMock(return_value=mock_response)
+
         with (
             patch(
                 "backend.clients.espn.get_sport_config",
                 new=AsyncMock(return_value=MagicMock(regular_periods=4)),
             ),
-            patch("httpx.AsyncClient.get", new=AsyncMock(return_value=mock_response)),
+            patch("httpx.AsyncClient") as MockClient,
         ):
+            MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_http)
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=None)
             await fetch_games(Sport.NBA)
 
         assert _histogram_count("espn_poll_latency_seconds", {"sport": "nba"}) == before + 1
