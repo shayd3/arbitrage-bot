@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: arbitrage-bot-backend:latest
+          image: ghcr.io/shayd3/arbitrage-bot/backend:latest
           ports:
             - containerPort: 8000
           envFrom:
