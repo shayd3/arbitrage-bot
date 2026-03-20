@@ -49,6 +49,9 @@ class Executor:
                 game_id=game_id,
             )
             trade_id = await insert_trade(trade)
+            if trade_id is None:
+                logger.error("insert_trade returned None; skipping broadcast")
+                return
 
             await log_scanner(
                 "info",

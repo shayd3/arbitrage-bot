@@ -35,7 +35,7 @@ def _fp_to_int(val) -> int | None:
         return None
 
 
-def _parse_market(m: dict) -> "KalshiMarket":
+def _parse_market(m: dict) -> KalshiMarket:
     return KalshiMarket(
         ticker=m["ticker"],
         title=m.get("title", ""),

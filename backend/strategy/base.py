@@ -17,4 +17,5 @@ class Strategy(ABC):
     @abstractmethod
     async def evaluate(
         self, game: Game, market: KalshiMarket, config: SportConfig
-    ) -> TradeSignal: ...
+    ) -> TradeSignal:
+        ...
