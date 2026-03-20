@@ -1,6 +1,6 @@
 import type { Game, KalshiMarket, Trade, KalshiPosition } from '../types'
 import { parseUTCDate } from '../utils/time'
-import { computeOutcomePnL, computePnL } from '../utils/pnl'
+import { computePnL } from '../utils/pnl'
 
 interface Props {
   game: Game
