@@ -1,10 +1,12 @@
 import logging
-from backend.models import Game, KalshiMarket, GameStatus
+
+from backend.db import get_config_override
+from backend.models import Game, GameStatus, KalshiMarket
 from backend.scanner.sports import SportConfig
 from backend.strategy.base import Strategy, TradeSignal
-from backend.db import get_config_override
 
 logger = logging.getLogger(__name__)
+
 
 class LateGameStrategy(Strategy):
     """
@@ -53,10 +55,7 @@ class LateGameStrategy(Strategy):
             price = no_ask if no_ask is not None else (100 - yes_ask)
 
         if price < min_yes_price:
-            return TradeSignal(
-                False, side, price, 0,
-                f"Price {price}¢ < min {min_yes_price}¢"
-            )
+            return TradeSignal(False, side, price, 0, f"Price {price}¢ < min {min_yes_price}¢")
 
         # Max profit is (100 - price) cents per contract
         # Min acceptable spread: 12¢
@@ -66,6 +65,7 @@ class LateGameStrategy(Strategy):
 
         # Size position to 20% of available balance
         from backend.execution.risk import get_max_position_dollars
+
         max_dollars = await get_max_position_dollars()
         contracts = self._size_position(price, max_dollars)
 
@@ -73,7 +73,9 @@ class LateGameStrategy(Strategy):
             f"Lead={lead}, Period={clock.period}, Clock={clock.display_clock}, "
             f"Price={price}¢, Spread={spread}¢"
         )
-        logger.info(f"Trade signal: {side.upper()} {contracts}x {market.ticker} @ {price}¢ | {reason}")
+        logger.info(
+            f"Trade signal: {side.upper()} {contracts}x {market.ticker} @ {price}¢ | {reason}"
+        )
 
         return TradeSignal(True, side, price, contracts, reason)
 

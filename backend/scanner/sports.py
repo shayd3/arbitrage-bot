@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+
 from backend.models import Sport
 
 # Kalshi series ticker for game winner markets per sport
@@ -11,16 +12,18 @@ SPORT_SERIES_TICKER: dict[Sport, str] = {
     Sport.CBB: "KXCBBGAME",
 }
 
+
 @dataclass
 class SportConfig:
     sport: Sport
-    final_period: int          # Last regular period number
-    final_period_window: float # Seconds remaining threshold
-    min_lead: int              # Points/goals/runs required
-    min_yes_price: int         # Minimum YES price in cents
-    poll_interval: float       # ESPN poll interval in seconds
-    regular_periods: int = 4   # Periods before overtime
-    clock_based: bool = True   # False for MLB (innings, no game clock)
+    final_period: int  # Last regular period number
+    final_period_window: float  # Seconds remaining threshold
+    min_lead: int  # Points/goals/runs required
+    min_yes_price: int  # Minimum YES price in cents
+    poll_interval: float  # ESPN poll interval in seconds
+    regular_periods: int = 4  # Periods before overtime
+    clock_based: bool = True  # False for MLB (innings, no game clock)
+
 
 SPORT_CONFIGS: dict[Sport, SportConfig] = {
     Sport.NBA: SportConfig(
@@ -56,7 +59,7 @@ SPORT_CONFIGS: dict[Sport, SportConfig] = {
     Sport.MLB: SportConfig(
         sport=Sport.MLB,
         final_period=9,
-        final_period_window=0.0,   # No game clock; gate triggers at final_period (9th inning)
+        final_period_window=0.0,  # No game clock; gate triggers at final_period (9th inning)
         min_lead=5,
         min_yes_price=88,
         poll_interval=20.0,
@@ -85,10 +88,12 @@ SPORT_CONFIGS: dict[Sport, SportConfig] = {
     ),
 }
 
+
 async def get_sport_config(sport: Sport) -> SportConfig:
     """Get sport config, applying any DB overrides."""
-    from backend.db import get_config_override
     import json
+
+    from backend.db import get_config_override
 
     config = SPORT_CONFIGS.get(sport)
     if config is None:
@@ -103,7 +108,9 @@ async def get_sport_config(sport: Sport) -> SportConfig:
             return SportConfig(
                 sport=sport,
                 final_period=overrides.get("final_period", config.final_period),
-                final_period_window=overrides.get("final_period_window", config.final_period_window),
+                final_period_window=overrides.get(
+                    "final_period_window", config.final_period_window
+                ),
                 min_lead=overrides.get("min_lead", config.min_lead),
                 min_yes_price=overrides.get("min_yes_price", config.min_yes_price),
                 poll_interval=overrides.get("poll_interval", config.poll_interval),

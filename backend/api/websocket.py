@@ -1,14 +1,14 @@
-import asyncio
 import json
 import logging
-from typing import Set
+
 from fastapi import WebSocket, WebSocketDisconnect
 
 logger = logging.getLogger(__name__)
 
+
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: Set[WebSocket] = set()
+        self.active_connections: set[WebSocket] = set()
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
@@ -32,13 +32,15 @@ class ConnectionManager:
         for ws in disconnected:
             self.active_connections.discard(ws)
 
+
 manager = ConnectionManager()
+
 
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         while True:
             # Keep connection alive, client can send pings
-            data = await websocket.receive_text()
+            await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)

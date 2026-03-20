@@ -1,10 +1,12 @@
 import logging
+
+from backend.execution.executor import executor
 from backend.models import Game, KalshiMarket
 from backend.scanner.sports import SportConfig
 from backend.strategy.late_game import late_game_strategy
-from backend.execution.executor import executor
 
 logger = logging.getLogger(__name__)
+
 
 class StrategyEvaluator:
     def __init__(self):
@@ -26,5 +28,6 @@ class StrategyEvaluator:
                     )
             except Exception as e:
                 logger.error(f"Strategy evaluation error: {e}", exc_info=True)
+
 
 evaluator = StrategyEvaluator()

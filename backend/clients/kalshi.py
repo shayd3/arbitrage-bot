@@ -1,18 +1,19 @@
-import httpx
 import base64
-import hashlib
-import time
 import json
+import time
 from pathlib import Path
-from typing import Optional
+
+import httpx
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
-from datetime import datetime
+
 from backend.config import settings
 from backend.models import KalshiMarket
 
+
 class KalshiAuthError(Exception):
     pass
+
 
 def _dollars_to_cents(val) -> int | None:
     """Convert Kalshi dollar string (e.g. '0.8100') to cents int (81)."""
@@ -23,6 +24,7 @@ def _dollars_to_cents(val) -> int | None:
     except (ValueError, TypeError):
         return None
 
+
 def _fp_to_int(val) -> int | None:
     """Convert Kalshi fixed-point string (e.g. '73774.00') to int."""
     if val is None:
@@ -32,7 +34,8 @@ def _fp_to_int(val) -> int | None:
     except (ValueError, TypeError):
         return None
 
-def _parse_market(m: dict) -> "KalshiMarket":
+
+def _parse_market(m: dict) -> KalshiMarket:
     return KalshiMarket(
         ticker=m["ticker"],
         title=m.get("title", ""),
@@ -46,6 +49,7 @@ def _parse_market(m: dict) -> "KalshiMarket":
         close_time=m.get("close_time"),
         result=m.get("result"),
     )
+
 
 class KalshiClient:
     def __init__(self):
@@ -69,6 +73,7 @@ class KalshiClient:
         timestamp_ms = str(int(time.time() * 1000))
         # Kalshi signs the full path (e.g. /trade-api/v2/portfolio/balance), not just the relative path
         from urllib.parse import urlparse
+
         parsed = urlparse(self.base_url)
         full_path = parsed.path.rstrip("/") + path
         message = timestamp_ms + method.upper() + full_path + body
@@ -101,10 +106,11 @@ class KalshiClient:
         auth_headers = self._sign_request(method, path, body="")
         headers = {**auth_headers, "Content-Type": "application/json"}
         response = await client.request(
-            method, path,
+            method,
+            path,
             headers=headers,
             content=body_str.encode("utf-8") if body_str else None,
-            **kwargs
+            **kwargs,
         )
         response.raise_for_status()
         return response.json()
@@ -114,7 +120,9 @@ class KalshiClient:
         data = await self._request("GET", "/portfolio/balance")
         return int(data.get("balance", 0))
 
-    async def get_markets(self, status: str = "open", limit: int = 100, cursor: str = "", series_ticker: str = "") -> list[KalshiMarket]:
+    async def get_markets(
+        self, status: str = "open", limit: int = 100, cursor: str = "", series_ticker: str = ""
+    ) -> list[KalshiMarket]:
         """Fetch open markets, optionally filtered."""
         params = {"status": status, "limit": limit}
         if cursor:
@@ -136,7 +144,9 @@ class KalshiClient:
         data = await self._request("GET", f"/markets/{ticker}/orderbook")
         return data.get("orderbook", {})
 
-    async def create_order(self, ticker: str, side: str, count: int, price: int, order_type: str = "limit") -> dict:
+    async def create_order(
+        self, ticker: str, side: str, count: int, price: int, order_type: str = "limit"
+    ) -> dict:
         """
         Place an order.
         side: "yes" or "no"
@@ -176,6 +186,7 @@ class KalshiClient:
     async def close(self):
         if self._client and not self._client.is_closed:
             await self._client.aclose()
+
 
 # Singleton
 kalshi_client = KalshiClient()

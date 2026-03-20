@@ -1,10 +1,10 @@
 """Tests for backend/scanner/sports.py — sport config and DB overrides."""
+
 import json
-import pytest
 from unittest.mock import AsyncMock, patch
 
 from backend.models import Sport
-from backend.scanner.sports import get_sport_config, SPORT_CONFIGS, SPORT_SERIES_TICKER, SportConfig
+from backend.scanner.sports import SPORT_CONFIGS, SPORT_SERIES_TICKER, get_sport_config
 
 
 class TestSportConfigDefaults:

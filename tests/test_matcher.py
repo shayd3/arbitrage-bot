@@ -1,34 +1,37 @@
 """Tests for backend/scanner/matcher.py — game-to-market matching."""
-import pytest
-from datetime import datetime, timezone, timedelta
+
+from datetime import UTC, datetime, timedelta
+
 from backend.models import Game, GameStatus, KalshiMarket, Sport, Team
 from backend.scanner.matcher import (
-    normalize_team_name,
-    team_to_kalshi_abbrev,
+    _GAME_TIME_TOLERANCE_SECS,
+    GameMarketMatch,
     _ticker_contains_team,
     match_game_to_markets,
     match_markets_to_games,
+    normalize_team_name,
     sport_from_ticker,
-    GameMarketMatch,
-    _GAME_TIME_TOLERANCE_SECS,
+    team_to_kalshi_abbrev,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-_BASE_TIME = datetime(2026, 3, 19, 22, 0, 0, tzinfo=timezone.utc)  # 10pm UTC Mar 19
+_BASE_TIME = datetime(2026, 3, 19, 22, 0, 0, tzinfo=UTC)  # 10pm UTC Mar 19
 
 
 def make_game(
-    home_name="Los Angeles Lakers", home_abbrev="LAL",
-    away_name="Boston Celtics", away_abbrev="BOS",
+    home_name="Los Angeles Lakers",
+    home_abbrev="LAL",
+    away_name="Boston Celtics",
+    away_abbrev="BOS",
     sport=Sport.NBA,
     start_time: datetime | None = None,
 ) -> Game:
     return Game(
-        id="g1", sport=sport,
+        id="g1",
+        sport=sport,
         home_team=Team(id="h", name=home_name, abbreviation=home_abbrev, score=0),
         away_team=Team(id="a", name=away_name, abbreviation=away_abbrev, score=0),
         status=GameStatus.IN_PROGRESS,
@@ -36,15 +39,23 @@ def make_game(
     )
 
 
-def make_market(ticker="KXNBA-LAL-BOS-20260317", status="open",
-                close_time: datetime | None = None) -> KalshiMarket:
-    return KalshiMarket(ticker=ticker, title="Lakers vs Celtics", status=status,
-                        yes_ask=80, no_ask=22, close_time=close_time)
+def make_market(
+    ticker="KXNBA-LAL-BOS-20260317", status="open", close_time: datetime | None = None
+) -> KalshiMarket:
+    return KalshiMarket(
+        ticker=ticker,
+        title="Lakers vs Celtics",
+        status=status,
+        yes_ask=80,
+        no_ask=22,
+        close_time=close_time,
+    )
 
 
 # ---------------------------------------------------------------------------
 # normalize_team_name
 # ---------------------------------------------------------------------------
+
 
 class TestNormalizeTeamName:
     def test_lowercases(self):
@@ -60,6 +71,7 @@ class TestNormalizeTeamName:
 # ---------------------------------------------------------------------------
 # team_to_kalshi_abbrev
 # ---------------------------------------------------------------------------
+
 
 class TestTeamToKalshiAbbrev:
     def test_full_name(self):
@@ -109,6 +121,7 @@ class TestTeamToKalshiAbbrev:
 # _ticker_contains_team
 # ---------------------------------------------------------------------------
 
+
 class TestTickerContainsTeam:
     def test_match_with_dash(self):
         assert _ticker_contains_team("KXNBA-LAL-BOS", "LAL") is True
@@ -127,6 +140,7 @@ class TestTickerContainsTeam:
 # ---------------------------------------------------------------------------
 # match_game_to_markets
 # ---------------------------------------------------------------------------
+
 
 class TestMatchGameToMarkets:
     def test_matching_by_alias(self):
@@ -151,8 +165,12 @@ class TestMatchGameToMarkets:
 
     def test_match_via_espn_abbreviation(self):
         """If alias lookup fails, ESPN abbreviation is also tried."""
-        game = make_game(home_name="Unknown Team", home_abbrev="UNK",
-                         away_name="Boston Celtics", away_abbrev="BOS")
+        game = make_game(
+            home_name="Unknown Team",
+            home_abbrev="UNK",
+            away_name="Boston Celtics",
+            away_abbrev="BOS",
+        )
         markets = [make_market("KXNBA-UNK-BOS-20260317")]
         result = match_game_to_markets(game, markets)
         assert len(result) == 1
@@ -194,8 +212,10 @@ class TestMatchGameToMarkets:
     def test_kxnbagame_format_both_markets_matched(self):
         """KXNBAGAME-{DATE}{AWAY}{HOME}-{WINNER} — both team outcome markets match."""
         game = make_game(
-            home_name="Orlando Magic", home_abbrev="ORL",
-            away_name="Oklahoma City Thunder", away_abbrev="OKC",
+            home_name="Orlando Magic",
+            home_abbrev="ORL",
+            away_name="Oklahoma City Thunder",
+            away_abbrev="OKC",
         )
         markets = [
             make_market("KXNBAGAME-26MAR17OKCORL-OKC", status="active"),
@@ -270,16 +290,19 @@ class TestMatchGameToMarkets:
 # GameMarketMatch
 # ---------------------------------------------------------------------------
 
+
 class TestGameMarketMatch:
     def _make_match(self, home_score, away_score, home_team_wins, yes_ask=80, no_ask=22):
         game = Game(
-            id="g", sport=Sport.NBA,
+            id="g",
+            sport=Sport.NBA,
             home_team=Team(id="h", name="Lakers", abbreviation="LAL", score=home_score),
             away_team=Team(id="a", name="Celtics", abbreviation="BOS", score=away_score),
             status=GameStatus.IN_PROGRESS,
         )
-        market = KalshiMarket(ticker="KXNBA-LAL", title="t", status="open",
-                              yes_ask=yes_ask, no_ask=no_ask)
+        market = KalshiMarket(
+            ticker="KXNBA-LAL", title="t", status="open", yes_ask=yes_ask, no_ask=no_ask
+        )
         return GameMarketMatch(game, market, home_team_wins)
 
     def test_home_leading_home_is_yes(self):
@@ -306,6 +329,7 @@ class TestGameMarketMatch:
 # ---------------------------------------------------------------------------
 # sport_from_ticker
 # ---------------------------------------------------------------------------
+
 
 class TestSportFromTicker:
     def test_nba_game_prefix(self):
@@ -346,12 +370,19 @@ class TestSportFromTicker:
 # match_markets_to_games
 # ---------------------------------------------------------------------------
 
+
 class TestMatchMarketsToGames:
-    def _make_nba_game(self, game_id="g1", home_name="Los Angeles Lakers",
-                       home_abbrev="LAL", away_name="Boston Celtics",
-                       away_abbrev="BOS") -> Game:
+    def _make_nba_game(
+        self,
+        game_id="g1",
+        home_name="Los Angeles Lakers",
+        home_abbrev="LAL",
+        away_name="Boston Celtics",
+        away_abbrev="BOS",
+    ) -> Game:
         return Game(
-            id=game_id, sport=Sport.NBA,
+            id=game_id,
+            sport=Sport.NBA,
             home_team=Team(id="h", name=home_name, abbreviation=home_abbrev, score=0),
             away_team=Team(id="a", name=away_name, abbreviation=away_abbrev, score=0),
             status=GameStatus.IN_PROGRESS,
@@ -367,8 +398,10 @@ class TestMatchMarketsToGames:
     def test_multiple_markets_match_same_game(self):
         """Two outcome markets for the same matchup should both pair with the game."""
         game = self._make_nba_game(
-            home_name="Orlando Magic", home_abbrev="ORL",
-            away_name="Oklahoma City Thunder", away_abbrev="OKC",
+            home_name="Orlando Magic",
+            home_abbrev="ORL",
+            away_name="Oklahoma City Thunder",
+            away_abbrev="OKC",
         )
         market_okc = make_market("KXNBAGAME-26MAR17OKCORL-OKC", status="active")
         market_orl = make_market("KXNBAGAME-26MAR17OKCORL-ORL", status="active")
@@ -409,8 +442,10 @@ class TestMatchMarketsToGames:
         game_lal_bos = self._make_nba_game(game_id="g1")
         game_okc_orl = self._make_nba_game(
             game_id="g2",
-            home_name="Orlando Magic", home_abbrev="ORL",
-            away_name="Oklahoma City Thunder", away_abbrev="OKC",
+            home_name="Orlando Magic",
+            home_abbrev="ORL",
+            away_name="Oklahoma City Thunder",
+            away_abbrev="OKC",
         )
         market_lal = make_market("KXNBAGAME-26MAR17LALBOS-LAL", status="active")
         market_bos = make_market("KXNBAGAME-26MAR17LALBOS-BOS", status="active")

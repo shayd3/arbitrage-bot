@@ -1,20 +1,22 @@
 """Tests for backend/strategy/late_game.py — LateGameStrategy."""
-import pytest
+
 from unittest.mock import AsyncMock, patch
 
-from backend.models import Game, GameStatus, GameClock, KalshiMarket, Sport, Team
-from backend.scanner.sports import SportConfig, SPORT_CONFIGS
+from backend.models import Game, GameClock, GameStatus, KalshiMarket, Sport, Team
+from backend.scanner.sports import SPORT_CONFIGS
 from backend.strategy.late_game import LateGameStrategy
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 def make_game(
-    home_score=110, away_score=90,
+    home_score=110,
+    away_score=90,
     status=GameStatus.IN_PROGRESS,
-    period=4, seconds_remaining=120.0,
+    period=4,
+    seconds_remaining=120.0,
     sport=Sport.NBA,
 ) -> Game:
     return Game(
@@ -26,9 +28,11 @@ def make_game(
         clock=GameClock(
             period=period,
             period_type="regular",
-            display_clock=f"2:00",
+            display_clock="2:00",
             seconds_remaining=seconds_remaining,
-        ) if status == GameStatus.IN_PROGRESS else None,
+        )
+        if status == GameStatus.IN_PROGRESS
+        else None,
     )
 
 
@@ -59,12 +63,15 @@ def patch_max_dollars(dollars=200.0):
 # Rejection cases
 # ---------------------------------------------------------------------------
 
+
 class TestLateGameRejections:
     async def test_game_not_in_progress(self):
         game = make_game(status=GameStatus.FINAL)
         game.clock = None
         market = make_market()
-        with patch("backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)):
+        with patch(
+            "backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)
+        ):
             signal = await strategy.evaluate(game, market, NBA_CONFIG)
         assert not signal.should_trade
         assert "not in progress" in signal.reason
@@ -73,7 +80,9 @@ class TestLateGameRejections:
         game = make_game()
         game.clock = None
         market = make_market()
-        with patch("backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)):
+        with patch(
+            "backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)
+        ):
             signal = await strategy.evaluate(game, market, NBA_CONFIG)
         assert not signal.should_trade
         assert "clock" in signal.reason.lower()
@@ -82,7 +91,9 @@ class TestLateGameRejections:
         # NBA min_lead = 15; give a lead of 5
         game = make_game(home_score=100, away_score=96)
         market = make_market()
-        with patch("backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)):
+        with patch(
+            "backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)
+        ):
             signal = await strategy.evaluate(game, market, NBA_CONFIG)
         assert not signal.should_trade
         assert "Lead" in signal.reason
@@ -90,7 +101,9 @@ class TestLateGameRejections:
     async def test_no_yes_ask_price(self):
         game = make_game()
         market = make_market(yes_ask=None)
-        with patch("backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)):
+        with patch(
+            "backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)
+        ):
             signal = await strategy.evaluate(game, market, NBA_CONFIG)
         assert not signal.should_trade
         assert "YES ask" in signal.reason
@@ -99,7 +112,9 @@ class TestLateGameRejections:
         # NBA min_yes_price = 88; give 80¢ YES ask
         game = make_game()
         market = make_market(yes_ask=80)
-        with patch("backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)):
+        with patch(
+            "backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)
+        ):
             signal = await strategy.evaluate(game, market, NBA_CONFIG)
         assert not signal.should_trade
         assert "min" in signal.reason
@@ -108,7 +123,9 @@ class TestLateGameRejections:
         # Price 90¢ → spread = 10¢ < 12¢ minimum
         game = make_game()
         market = make_market(yes_ask=90)
-        with patch("backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)):
+        with patch(
+            "backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)
+        ):
             signal = await strategy.evaluate(game, market, NBA_CONFIG)
         assert not signal.should_trade
         assert "Spread" in signal.reason
@@ -118,12 +135,15 @@ class TestLateGameRejections:
 # Trade signals
 # ---------------------------------------------------------------------------
 
+
 class TestLateGameTradeSignals:
     async def test_home_leading_buys_yes(self):
         game = make_game(home_score=110, away_score=90)  # home up 20
         market = make_market(yes_ask=88)  # exactly at min, spread = 12¢ (boundary)
         with (
-            patch("backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)),
+            patch(
+                "backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)
+            ),
             patch_max_dollars(200.0),
         ):
             signal = await strategy.evaluate(game, market, NBA_CONFIG)
@@ -137,7 +157,9 @@ class TestLateGameTradeSignals:
         # min_yes_price check applies to whichever side we buy — use no_ask=88 to clear it
         market = make_market(yes_ask=15, no_ask=88)
         with (
-            patch("backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)),
+            patch(
+                "backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)
+            ),
             patch_max_dollars(200.0),
         ):
             signal = await strategy.evaluate(game, market, NBA_CONFIG)
@@ -150,7 +172,9 @@ class TestLateGameTradeSignals:
         game = make_game()
         market = make_market(yes_ask=88)
         with (
-            patch("backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)),
+            patch(
+                "backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)
+            ),
             patch_max_dollars(200.0),
         ):
             signal = await strategy.evaluate(game, market, NBA_CONFIG)
@@ -162,7 +186,9 @@ class TestLateGameTradeSignals:
         # YES ask 80¢ is normally below NBA's 88¢ min — but if override is 75, it should pass
         market = make_market(yes_ask=80)
         with (
-            patch("backend.strategy.late_game.get_config_override", new=AsyncMock(return_value="75")),
+            patch(
+                "backend.strategy.late_game.get_config_override", new=AsyncMock(return_value="75")
+            ),
             patch_max_dollars(200.0),
         ):
             signal = await strategy.evaluate(game, market, NBA_CONFIG)
@@ -173,6 +199,7 @@ class TestLateGameTradeSignals:
 # ---------------------------------------------------------------------------
 # _size_position unit tests
 # ---------------------------------------------------------------------------
+
 
 class TestSizePosition:
     def test_basic_sizing(self):

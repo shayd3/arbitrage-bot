@@ -1,6 +1,6 @@
 import type { Game, KalshiMarket, Trade, KalshiPosition } from '../types'
-import { toKalshiAbbr } from '../utils/teams'
 import { parseUTCDate } from '../utils/time'
+import { computePnL } from '../utils/pnl'
 
 interface Props {
   game: Game
@@ -87,44 +87,6 @@ function MarketRow({ market }: { market: KalshiMarket }) {
   )
 }
 
-function computeOutcomePnL(trade: Trade, game: Game): number | null {
-  if (game.status !== 'final') return null
-  // Extract YES team abbreviation from ticker: "KXNBAGAME-26MAR18GSWBOS-BOS" → "BOS"
-  const parts = trade.ticker.split('-')
-  const yesTeam = parts[parts.length - 1].toUpperCase()
-
-  let yesTeamWon: boolean
-  if (yesTeam === toKalshiAbbr(game.home_team.abbreviation, game.sport)) {
-    yesTeamWon = game.home_team.score > game.away_team.score
-  } else if (yesTeam === toKalshiAbbr(game.away_team.abbreviation, game.sport)) {
-    yesTeamWon = game.away_team.score > game.home_team.score
-  } else {
-    return null
-  }
-
-  const betWon = trade.side === 'yes' ? yesTeamWon : !yesTeamWon
-  return betWon
-    ? (trade.contracts * (100 - trade.price)) / 100
-    : -(trade.contracts * trade.price) / 100
-}
-
-function computePnL(trade: Trade, game: Game, markets: KalshiMarket[], position?: KalshiPosition): number | null {
-  if (trade.pnl != null) return trade.pnl
-  // For final games, compute from actual game outcome
-  const outcomePnL = computeOutcomePnL(trade, game)
-  if (outcomePnL != null) return outcomePnL
-  // Use Kalshi's reported values when available (most accurate for in-progress)
-  if (position?.market_exposure_dollars != null && position?.total_traded_dollars != null) {
-    const marketValue = parseFloat(position.market_exposure_dollars)
-    const cost = parseFloat(position.total_traded_dollars)
-    if (!isNaN(marketValue) && !isNaN(cost)) return marketValue - cost
-  }
-  const market = markets.find(m => m.ticker === trade.ticker)
-  if (!market) return null
-  const currentValue = trade.side === 'yes' ? market.yes_bid : market.no_bid
-  if (currentValue == null) return null
-  return ((currentValue - trade.price) * trade.contracts) / 100
-}
 
 function TradeRow({ trade, game, markets, position }: { trade: Trade; game: Game; markets: KalshiMarket[]; position?: KalshiPosition }) {
   const pnlDollars = computePnL(trade, game, markets, position)

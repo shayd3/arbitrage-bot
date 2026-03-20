@@ -1,21 +1,26 @@
 import logging
-from datetime import datetime, date
-from backend.db import get_trades, get_latest_balance
+from datetime import date
+
+from backend.db import get_latest_balance, get_trades
 
 logger = logging.getLogger(__name__)
 
 # Risk limits
-MAX_POSITION_PCT = 0.20        # 20% of available balance per trade
-MAX_OPEN_POSITIONS = 5         # max concurrent positions
+MAX_POSITION_PCT = 0.20  # 20% of available balance per trade
+MAX_OPEN_POSITIONS = 5  # max concurrent positions
 MAX_DAILY_LOSS_DOLLARS = 100.0
+
 
 class RiskError(Exception):
     pass
 
+
 async def _get_risk_params() -> dict:
     """Return risk params, applying any DB overrides from the strategy page."""
-    from backend.db import get_config_override
     import json
+
+    from backend.db import get_config_override
+
     params = {
         "max_position_pct": MAX_POSITION_PCT,
         "max_open_positions": MAX_OPEN_POSITIONS,
@@ -35,15 +40,20 @@ async def _get_risk_params() -> dict:
             pass
     return params
 
+
 async def get_max_position_dollars() -> float:
     """Return max dollars allowed for a single trade."""
     params = await _get_risk_params()
     balance = await get_latest_balance()
     available = balance["available"] if balance else 0.0
-    return available * params["max_position_pct"]
+    return float(available * params["max_position_pct"])
+
 
 async def pre_trade_checks(
-    ticker: str, side: str, contracts: int, price: int,
+    ticker: str,
+    side: str,
+    contracts: int,
+    price: int,
     game_id: str | None = None,
 ):
     """Raise RiskError if trade should not proceed."""
@@ -61,7 +71,7 @@ async def pre_trade_checks(
     max_cost = available * params["max_position_pct"]
     if cost > max_cost:
         raise RiskError(
-            f"Position ${cost:.2f} exceeds {params['max_position_pct']*100:.0f}% of balance (${max_cost:.2f})"
+            f"Position ${cost:.2f} exceeds {params['max_position_pct'] * 100:.0f}% of balance (${max_cost:.2f})"
         )
     if available < cost:
         raise RiskError(f"Insufficient balance: need ${cost:.2f}, have ${available:.2f}")

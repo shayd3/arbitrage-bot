@@ -1,11 +1,11 @@
 """Tests for backend/clients/kalshi.py — price parsing and order construction."""
-import pytest
-from backend.clients.kalshi import _dollars_to_cents, _fp_to_int, _parse_market
 
+from backend.clients.kalshi import _dollars_to_cents, _fp_to_int, _parse_market
 
 # ---------------------------------------------------------------------------
 # _dollars_to_cents
 # ---------------------------------------------------------------------------
+
 
 class TestDollarsToCents:
     def test_typical_yes_ask(self):
@@ -43,6 +43,7 @@ class TestDollarsToCents:
 # _fp_to_int
 # ---------------------------------------------------------------------------
 
+
 class TestFpToInt:
     def test_typical_volume(self):
         assert _fp_to_int("73774.00") == 73774
@@ -70,6 +71,7 @@ class TestFpToInt:
 # ---------------------------------------------------------------------------
 # _parse_market — field mapping from Kalshi API response
 # ---------------------------------------------------------------------------
+
 
 class TestParseMarket:
     def _raw(self, **overrides) -> dict:

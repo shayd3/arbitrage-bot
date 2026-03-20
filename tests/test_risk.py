@@ -1,22 +1,24 @@
 """Tests for backend/execution/risk.py — pre_trade_checks and _get_risk_params."""
+
 import json
-import pytest
-from unittest.mock import AsyncMock, patch
 from datetime import date
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from backend.execution.risk import (
-    pre_trade_checks,
-    _get_risk_params,
-    RiskError,
-    MAX_POSITION_PCT,
-    MAX_OPEN_POSITIONS,
     MAX_DAILY_LOSS_DOLLARS,
+    MAX_OPEN_POSITIONS,
+    MAX_POSITION_PCT,
+    RiskError,
+    _get_risk_params,
+    pre_trade_checks,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def make_trade(ticker="KXNBA-LAL", status="filled", pnl=None, game_id=None, created_at=None):
     return {
@@ -48,6 +50,7 @@ def patch_risk(balance=_UNSET, trades=None, config_override=None):
 # _get_risk_params
 # ---------------------------------------------------------------------------
 
+
 class TestGetRiskParams:
     async def test_defaults_when_no_override(self):
         with patch("backend.db.get_config_override", new=AsyncMock(return_value=None)):
@@ -57,7 +60,9 @@ class TestGetRiskParams:
         assert params["max_daily_loss"] == MAX_DAILY_LOSS_DOLLARS
 
     async def test_db_override_applies(self):
-        override = json.dumps({"max_position_pct": 10, "max_open_positions": 3, "max_daily_loss": 50.0})
+        override = json.dumps(
+            {"max_position_pct": 10, "max_open_positions": 3, "max_daily_loss": 50.0}
+        )
         with patch("backend.db.get_config_override", new=AsyncMock(return_value=override)):
             params = await _get_risk_params()
         assert params["max_position_pct"] == pytest.approx(0.10)
@@ -82,6 +87,7 @@ class TestGetRiskParams:
 # pre_trade_checks — happy path
 # ---------------------------------------------------------------------------
 
+
 class TestPreTradeChecksPass:
     async def test_valid_trade_passes(self):
         """A trade well within all limits should not raise."""
@@ -94,6 +100,7 @@ class TestPreTradeChecksPass:
 # ---------------------------------------------------------------------------
 # pre_trade_checks — validation failures
 # ---------------------------------------------------------------------------
+
 
 class TestPreTradeChecksInputValidation:
     async def test_zero_contracts(self):
@@ -151,8 +158,10 @@ class TestPreTradeChecksBalanceLimits:
 class TestPreTradeChecksDailyLoss:
     async def test_daily_loss_limit_reached(self):
         today = date.today().isoformat()
-        trades = [make_trade(pnl=-50.0, created_at=f"{today}T10:00:00"),
-                  make_trade(ticker="KXNBA-BOS", pnl=-60.0, created_at=f"{today}T11:00:00")]
+        trades = [
+            make_trade(pnl=-50.0, created_at=f"{today}T10:00:00"),
+            make_trade(ticker="KXNBA-BOS", pnl=-60.0, created_at=f"{today}T11:00:00"),
+        ]
         bal, trd, cfg = patch_risk(trades=trades)
         with bal, trd, cfg, pytest.raises(RiskError, match="Daily loss"):
             await pre_trade_checks("KXNBA-LAL", "yes", 1, 50)
