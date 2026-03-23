@@ -111,17 +111,3 @@ jobs:
             ghcr.io/shayd3/arbitrage-bot/frontend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Scan backend image
-        uses: aquasecurity/trivy-action@0.30.0
-        with:
-          image-ref: ghcr.io/shayd3/arbitrage-bot/backend:${{ github.sha }}
-          format: table
-          exit-code: '0'
-
-      - name: Scan frontend image
-        uses: aquasecurity/trivy-action@0.30.0
-        with:
-          image-ref: ghcr.io/shayd3/arbitrage-bot/frontend:${{ github.sha }}
-          format: table
-          exit-code: '0'
