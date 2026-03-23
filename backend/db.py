@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import aiosqlite
 
@@ -116,6 +116,40 @@ async def get_trades(limit: int = 100) -> list[dict]:
     )
     rows = await cursor.fetchall()
     return [dict(r) for r in rows]
+
+
+async def count_active_positions() -> int:
+    """Return the number of trades with status 'pending' or 'filled' via a SQL aggregate.
+
+    The `kalshi_order_id IS NOT NULL` guard filters out legacy simulated rows
+    that predate the live-trading migration (same filter used in get_trades).
+    """
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT COUNT(*) FROM trades WHERE kalshi_order_id IS NOT NULL AND status IN ('pending', 'filled')"
+    )
+    row = await cursor.fetchone()
+    return int(row[0]) if row else 0
+
+
+async def sum_daily_pnl(today: date) -> float:
+    """Return the sum of settled pnl for trades created on *today* (UTC date).
+
+    Uses an ISO-8601 range query (``created_at >= start AND created_at < end``)
+    rather than a LIKE prefix so that any future index on ``created_at`` is used.
+    """
+    day_start = datetime(today.year, today.month, today.day, tzinfo=UTC).isoformat()
+    day_end = datetime(today.year, today.month, today.day, tzinfo=UTC) + timedelta(days=1)
+    day_end_iso = day_end.isoformat()
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT COALESCE(SUM(pnl), 0.0) FROM trades "
+        "WHERE kalshi_order_id IS NOT NULL AND pnl IS NOT NULL "
+        "AND created_at >= ? AND created_at < ?",
+        (day_start, day_end_iso),
+    )
+    row = await cursor.fetchone()
+    return float(row[0]) if row else 0.0
 
 
 async def insert_balance(balance: Balance):

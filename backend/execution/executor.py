@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 
 from backend.db import insert_trade, log_scanner
 from backend.execution.risk import RiskError, pre_trade_checks
+from backend.metrics import trades_placed_total, trades_rejected_total
 from backend.models import MarketSide, Trade, TradeStatus
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,26 @@ class Executor:
         except RiskError as e:
             logger.warning(f"Risk check failed: {e}")
             await log_scanner("warning", f"Risk check failed for {ticker}: {e}")
+            rejection_reason = getattr(e, "code", None)
+            if not rejection_reason:
+                msg = str(e).lower()
+                if "exceeds" in msg and "position" in msg:
+                    rejection_reason = "position_size"
+                elif "insufficient" in msg:
+                    rejection_reason = "insufficient_balance"
+                elif "daily loss" in msg:
+                    rejection_reason = "daily_loss_limit"
+                elif "max" in msg and "positions" in msg:
+                    rejection_reason = "max_positions"
+                elif "already" in msg or "duplicate" in msg:
+                    rejection_reason = "duplicate"
+                elif "contracts" in msg:
+                    rejection_reason = "invalid_contracts"
+                elif "price" in msg:
+                    rejection_reason = "invalid_price"
+                else:
+                    rejection_reason = "other"
+            trades_rejected_total.labels(reason=rejection_reason).inc()
             return
 
         await self._place_live_order(ticker, side, contracts, price, game_id, reason)
@@ -82,6 +103,7 @@ class Executor:
                 },
             )
 
+            trades_placed_total.inc()
             logger.info(
                 f"Order placed: {order_id} | {side.upper()} {contracts}x {ticker} @ {price}¢"
             )
