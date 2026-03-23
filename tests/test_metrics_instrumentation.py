@@ -25,12 +25,6 @@ def _gauge_value(gauge):
     return gauge._value.get()
 
 
-def _histogram_count(histogram, **labels):
-    if labels:
-        return histogram.labels(**labels)._metrics  # existence check
-    return histogram._metrics
-
-
 # ---------------------------------------------------------------------------
 # executor.py — trades_placed_total / trades_rejected_total
 # ---------------------------------------------------------------------------
@@ -63,9 +57,12 @@ class TestTradesPlacedCounter:
 
         before = _counter_value(metrics.trades_placed_total)
 
-        with patch(
-            "backend.execution.executor.pre_trade_checks",
-            new=AsyncMock(side_effect=RiskError("insufficient balance")),
+        with (
+            patch(
+                "backend.execution.executor.pre_trade_checks",
+                new=AsyncMock(side_effect=RiskError("insufficient balance")),
+            ),
+            patch("backend.execution.executor.log_scanner", new=AsyncMock()),
         ):
             await executor.execute("KXNBA-LAL", "yes", 10, 80)
 
@@ -77,9 +74,12 @@ class TestTradesRejectedCounter:
         from backend.execution.executor import executor
         from backend.execution.risk import RiskError
 
-        with patch(
-            "backend.execution.executor.pre_trade_checks",
-            new=AsyncMock(side_effect=RiskError(error_msg)),
+        with (
+            patch(
+                "backend.execution.executor.pre_trade_checks",
+                new=AsyncMock(side_effect=RiskError(error_msg)),
+            ),
+            patch("backend.execution.executor.log_scanner", new=AsyncMock()),
         ):
             await executor.execute("KXNBA-LAL", "yes", 10, 80)
 
@@ -143,7 +143,7 @@ class TestSyncBalanceGauge:
         with (
             patch(
                 "backend.scanner.engine.kalshi_client.get_balance",
-                new=AsyncMock(return_value=50000),  # 500 cents → $500
+                new=AsyncMock(return_value=50000),  # 50,000 cents → $500
             ),
             patch("backend.scanner.engine.insert_balance", new=AsyncMock()),
         ):
@@ -197,16 +197,17 @@ class TestUpdatePositionGauges:
         assert _gauge_value(metrics.daily_pnl) == pytest.approx(15.0)
 
     async def test_none_pnl_excluded_from_daily(self):
+        """When all trades have NULL pnl (COALESCE returns 0.0), gauge shows 0.0."""
         from backend.scanner.engine import ScannerEngine
 
         engine = ScannerEngine()
         with (
-            patch("backend.scanner.engine.count_active_positions", new=AsyncMock(return_value=0)),
-            patch("backend.scanner.engine.sum_daily_pnl", new=AsyncMock(return_value=30.0)),
+            patch("backend.scanner.engine.count_active_positions", new=AsyncMock(return_value=1)),
+            patch("backend.scanner.engine.sum_daily_pnl", new=AsyncMock(return_value=0.0)),
         ):
             await engine._update_position_gauges()
 
-        assert _gauge_value(metrics.daily_pnl) == pytest.approx(30.0)
+        assert _gauge_value(metrics.daily_pnl) == pytest.approx(0.0)
 
     async def test_exception_is_swallowed(self):
         from backend.scanner.engine import ScannerEngine
