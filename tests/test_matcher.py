@@ -7,9 +7,11 @@ from backend.scanner.matcher import (
     _GAME_TIME_TOLERANCE_SECS,
     GameMarketMatch,
     _ticker_contains_team,
+    espn_abbrev_to_kalshi,
     match_game_to_markets,
     match_markets_to_games,
     normalize_team_name,
+    outcome_team_from_ticker,
     sport_from_ticker,
     team_to_kalshi_abbrev,
 )
@@ -459,3 +461,71 @@ class TestMatchMarketsToGames:
         game_ids = [g.id for g, _ in pairs]
         assert game_ids.count("g1") == 2
         assert game_ids.count("g2") == 1
+
+
+# ---------------------------------------------------------------------------
+# outcome_team_from_ticker
+# ---------------------------------------------------------------------------
+
+
+class TestOutcomeTeamFromTicker:
+    def test_standard_kxnbagame_ticker(self):
+        assert outcome_team_from_ticker("KXNBAGAME-26MAR25SASMEM-SAS") == "SAS"
+
+    def test_home_team_outcome(self):
+        assert outcome_team_from_ticker("KXNBAGAME-26MAR25SASMEM-MEM") == "MEM"
+
+    def test_two_char_abbreviation(self):
+        assert outcome_team_from_ticker("KXNFLGAME-17SEP24NENGB-NE") == "NE"
+
+    def test_date_suffix_returns_none(self):
+        # Last segment is a date, not a team abbreviation
+        assert outcome_team_from_ticker("KXNBA-LAL-20260317") is None
+
+    def test_empty_string_returns_none(self):
+        assert outcome_team_from_ticker("") is None
+
+    def test_no_dashes_returns_none(self):
+        assert outcome_team_from_ticker("KXNBAGAME") is None
+
+    def test_case_insensitive_input(self):
+        assert outcome_team_from_ticker("kxnbagame-26mar25sasmem-sas") == "SAS"
+
+    def test_four_char_abbreviation(self):
+        # CBB teams can have 4-char abbreviations
+        assert outcome_team_from_ticker("KXCBBGAME-26MAR25DUKUNC-DUKE") == "DUKE"
+
+
+# ---------------------------------------------------------------------------
+# espn_abbrev_to_kalshi
+# ---------------------------------------------------------------------------
+
+
+class TestEspnAbbrevToKalshi:
+    def test_sa_to_sas(self):
+        assert espn_abbrev_to_kalshi("SA", Sport.NBA) == "SAS"
+
+    def test_wsh_to_was_nba(self):
+        assert espn_abbrev_to_kalshi("WSH", Sport.NBA) == "WAS"
+
+    def test_passthrough_no_override(self):
+        assert espn_abbrev_to_kalshi("LAL", Sport.NBA) == "LAL"
+
+    def test_nhl_override(self):
+        assert espn_abbrev_to_kalshi("TB", Sport.NHL) == "TBL"
+
+    def test_mlb_override(self):
+        assert espn_abbrev_to_kalshi("CWS", Sport.MLB) == "CHW"
+
+    def test_wnba_override(self):
+        assert espn_abbrev_to_kalshi("NY", Sport.WNBA) == "NYL"
+
+    def test_case_insensitive(self):
+        assert espn_abbrev_to_kalshi("sa", Sport.NBA) == "SAS"
+
+    def test_nfl_override(self):
+        assert espn_abbrev_to_kalshi("WSH", Sport.NFL) == "WAS"
+
+    def test_no_override_for_sport(self):
+        # NY is an NBA override (NYK) but not CBB — should pass through
+        assert espn_abbrev_to_kalshi("NY", Sport.CBB) == "NY"

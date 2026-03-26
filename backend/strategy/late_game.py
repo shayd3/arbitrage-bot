@@ -2,6 +2,11 @@ import logging
 
 from backend.db import get_config_override
 from backend.models import Game, GameStatus, KalshiMarket
+from backend.scanner.matcher import (
+    espn_abbrev_to_kalshi,
+    outcome_team_from_ticker,
+    team_to_kalshi_abbrev,
+)
 from backend.scanner.sports import SportConfig
 from backend.strategy.base import Strategy, TradeSignal
 
@@ -35,24 +40,45 @@ class LateGameStrategy(Strategy):
         if lead < config.min_lead:
             return TradeSignal(False, "yes", 0, 0, f"Lead {lead} < min {config.min_lead}")
 
-        home_leading = home_score > away_score
+        if home_score > away_score:
+            leading_team = game.home_team
+        elif away_score > home_score:
+            leading_team = game.away_team
+        else:
+            return TradeSignal(False, "yes", 0, 0, "Game is tied")
 
-        # Determine YES price for leading team
-        # On Kalshi: YES = home team wins (typically, but varies)
-        # We buy YES if the leading team maps to YES on this market
         yes_ask = market.yes_ask
         no_ask = market.no_ask
 
         if yes_ask is None:
             return TradeSignal(False, "yes", 0, 0, "No YES ask price")
 
-        # For now, assume YES = home team wins (Phase 2 will refine with ticker parsing)
-        if home_leading:
-            side = "yes"
-            price = yes_ask
+        # Determine which team YES refers to on this market by parsing the ticker suffix.
+        # e.g. KXNBAGAME-26MAR25SASMEM-SAS → YES = SAS wins
+        outcome_abbrev = outcome_team_from_ticker(market.ticker)
+        leading_kalshi = team_to_kalshi_abbrev(leading_team.name, game.sport)
+        if leading_kalshi is None:
+            leading_kalshi = espn_abbrev_to_kalshi(leading_team.abbreviation, game.sport)
+
+        if outcome_abbrev and leading_kalshi:
+            if outcome_abbrev == leading_kalshi.upper():
+                side = "yes"
+                price = yes_ask
+            else:
+                side = "no"
+                price = no_ask if no_ask is not None else (100 - yes_ask)
         else:
-            side = "no"
-            price = no_ask if no_ask is not None else (100 - yes_ask)
+            # Fallback: ticker unparseable, use legacy home=YES assumption
+            logger.warning(
+                "Could not parse outcome team from ticker %s, falling back to home=YES",
+                market.ticker,
+            )
+            if home_score > away_score:
+                side = "yes"
+                price = yes_ask
+            else:
+                side = "no"
+                price = no_ask if no_ask is not None else (100 - yes_ask)
 
         if price < min_yes_price:
             return TradeSignal(False, side, price, 0, f"Price {price}¢ < min {min_yes_price}¢")

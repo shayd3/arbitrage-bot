@@ -32,6 +32,8 @@ def _parse_clock(competition: dict, regular_periods: int) -> GameClock | None:
         parts = display_clock.split(":")
         if len(parts) == 2:
             seconds = int(parts[0]) * 60 + float(parts[1])
+        elif len(parts) == 1:
+            seconds = float(parts[0])
     except (ValueError, IndexError):
         pass
 

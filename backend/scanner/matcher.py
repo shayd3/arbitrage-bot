@@ -330,6 +330,44 @@ SPORT_TICKER_PREFIX: dict[Sport, list[str]] = {
     Sport.CBB: ["KXCBBGAME", "KXCBB", "CBB"],
 }
 
+# ESPN uses different abbreviations than Kalshi for some teams.
+# Mirrors frontend/src/utils/teams.ts ESPN_TO_KALSHI.
+ESPN_TO_KALSHI_ABBREV: dict[Sport, dict[str, str]] = {
+    Sport.NBA: {"WSH": "WAS", "SA": "SAS", "NY": "NYK", "GS": "GSW", "NO": "NOP"},
+    Sport.NFL: {"WSH": "WAS"},
+    Sport.NHL: {"TB": "TBL", "SJ": "SJS", "NJ": "NJD"},
+    Sport.MLB: {"CWS": "CHW"},
+    Sport.WNBA: {"NY": "NYL"},
+    Sport.CBB: {},
+}
+
+
+def espn_abbrev_to_kalshi(espn_abbrev: str, sport: Sport) -> str:
+    """Convert an ESPN team abbreviation to its Kalshi equivalent.
+
+    Most abbreviations are identical; this only handles known overrides.
+    """
+    upper = espn_abbrev.upper()
+    sport_map = ESPN_TO_KALSHI_ABBREV.get(sport, {})
+    return sport_map.get(upper, upper)
+
+
+def outcome_team_from_ticker(ticker: str) -> str | None:
+    """Extract the winning team abbreviation from the trailing segment of a Kalshi ticker.
+
+    For KXNBAGAME-26MAR25SASMEM-SAS, returns "SAS" (YES = SAS wins).
+    Returns None if the last segment doesn't look like a team abbreviation (2-4 alpha chars).
+    """
+    if not ticker:
+        return None
+    parts = ticker.upper().split("-")
+    if len(parts) < 2:
+        return None
+    last = parts[-1]
+    if re.fullmatch(r"[A-Z]{2,4}", last):
+        return last
+    return None
+
 
 def normalize_team_name(name: str) -> str:
     """Normalize a team name to lowercase for alias lookup."""
