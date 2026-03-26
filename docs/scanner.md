@@ -55,6 +55,29 @@ Status ordering: `pending (0) < filled (1) < settled (2)`. Cancelled is treated 
 
 **What can't be recovered:** The `game_id` field (which ESPN game triggered the trade) is only set at order placement time and is not stored in Kalshi. Synced-in orders will have a null `game_id`.
 
+## Trade Side Determination
+
+When an opportunity is detected, the strategy evaluates each matched Kalshi market to decide whether to buy **YES** or **NO**.
+
+Kalshi game-winner tickers follow this format:
+
+```
+KXNBAGAME-26MAR25SASMEM-SAS
+           └───────────┘ └─┘
+             game pair    outcome team (YES = this team wins)
+```
+
+The trailing suffix after the last `-` is the team whose **YES** side you are buying. The strategy parses this suffix to determine the correct side:
+
+- If the suffix matches the **leading team** → buy **YES**
+- If the suffix matches the **other team** → buy **NO**
+
+Both markets for a game (`-SAS` and `-MEM`) will produce a valid, equivalent trade signal. They both resolve to the same economic bet.
+
+**ESPN → Kalshi abbreviation mapping:** ESPN uses different abbreviations for some teams (e.g. `SA` for the San Antonio Spurs, but Kalshi uses `SAS`). The strategy resolves these via `espn_abbrev_to_kalshi()` in `backend/scanner/matcher.py`, which mirrors the same mapping used by the frontend.
+
+**Fallback:** If the ticker suffix can't be parsed as a team abbreviation (e.g. it's a date like `20260317`), the strategy falls back to the legacy assumption that YES = home team wins and logs a warning.
+
 ## Interval Configuration
 
 All scan intervals are configurable at runtime via the Settings page without restarting the app. Changes take effect within one scan loop iteration.

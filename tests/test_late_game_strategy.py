@@ -18,12 +18,16 @@ def make_game(
     period=4,
     seconds_remaining=120.0,
     sport=Sport.NBA,
+    home_name="Los Angeles Lakers",
+    home_abbrev="LAL",
+    away_name="Boston Celtics",
+    away_abbrev="BOS",
 ) -> Game:
     return Game(
         id="game-1",
         sport=sport,
-        home_team=Team(id="h", name="Los Angeles Lakers", abbreviation="LAL", score=home_score),
-        away_team=Team(id="a", name="Boston Celtics", abbreviation="BOS", score=away_score),
+        home_team=Team(id="h", name=home_name, abbreviation=home_abbrev, score=home_score),
+        away_team=Team(id="a", name=away_name, abbreviation=away_abbrev, score=away_score),
         status=status,
         clock=GameClock(
             period=period,
@@ -36,9 +40,9 @@ def make_game(
     )
 
 
-def make_market(yes_ask=90, no_ask=12, status="open") -> KalshiMarket:
+def make_market(yes_ask=90, no_ask=12, status="open", ticker="KXNBAGAME-26MAR25LALBOS-LAL") -> KalshiMarket:
     return KalshiMarket(
-        ticker="KXNBA-LAL-20260317",
+        ticker=ticker,
         title="Lakers to win",
         status=status,
         yes_ask=yes_ask,
@@ -138,8 +142,9 @@ class TestLateGameRejections:
 
 class TestLateGameTradeSignals:
     async def test_home_leading_buys_yes(self):
-        game = make_game(home_score=110, away_score=90)  # home up 20
-        market = make_market(yes_ask=88)  # exactly at min, spread = 12¢ (boundary)
+        # LAL (home) leading — market ticker ends in -LAL, so YES = LAL wins → buy YES
+        game = make_game(home_score=110, away_score=90)
+        market = make_market(yes_ask=88, ticker="KXNBAGAME-26MAR25LALBOS-LAL")
         with (
             patch(
                 "backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)
@@ -153,9 +158,9 @@ class TestLateGameTradeSignals:
         assert signal.contracts >= 1
 
     async def test_away_leading_buys_no(self):
-        game = make_game(home_score=80, away_score=100)  # away up 20
-        # min_yes_price check applies to whichever side we buy — use no_ask=88 to clear it
-        market = make_market(yes_ask=15, no_ask=88)
+        # BOS (away) leading — market ticker ends in -LAL (home), so YES = LAL wins → buy NO
+        game = make_game(home_score=80, away_score=100)
+        market = make_market(yes_ask=15, no_ask=88, ticker="KXNBAGAME-26MAR25LALBOS-LAL")
         with (
             patch(
                 "backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)
@@ -166,6 +171,70 @@ class TestLateGameTradeSignals:
         assert signal.should_trade
         assert signal.side == "no"
         assert signal.price == 88
+
+    async def test_away_leading_buys_yes_on_away_market(self):
+        # BOS (away) leading — market ticker ends in -BOS, so YES = BOS wins → buy YES
+        game = make_game(home_score=80, away_score=100)
+        market = make_market(yes_ask=88, no_ask=15, ticker="KXNBAGAME-26MAR25LALBOS-BOS")
+        with (
+            patch(
+                "backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)
+            ),
+            patch_max_dollars(200.0),
+        ):
+            signal = await strategy.evaluate(game, market, NBA_CONFIG)
+        assert signal.should_trade
+        assert signal.side == "yes"
+        assert signal.price == 88
+
+    async def test_home_leading_buys_no_on_away_market(self):
+        # LAL (home) leading — market ticker ends in -BOS (away), so YES = BOS wins → buy NO
+        game = make_game(home_score=110, away_score=90)
+        market = make_market(yes_ask=15, no_ask=88, ticker="KXNBAGAME-26MAR25LALBOS-BOS")
+        with (
+            patch(
+                "backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)
+            ),
+            patch_max_dollars(200.0),
+        ):
+            signal = await strategy.evaluate(game, market, NBA_CONFIG)
+        assert signal.should_trade
+        assert signal.side == "no"
+        assert signal.price == 88
+
+    async def test_espn_abbrev_mismatch_sa_vs_sas(self):
+        # SA (ESPN) → SAS (Kalshi). Ticker ends in -SAS. SA is away and leading → buy YES.
+        game = make_game(
+            home_score=87, away_score=115,
+            home_name="Memphis Grizzlies", home_abbrev="MEM",
+            away_name="San Antonio Spurs", away_abbrev="SA",
+        )
+        market = make_market(yes_ask=88, no_ask=15, ticker="KXNBAGAME-26MAR25SASMEM-SAS")
+        with (
+            patch(
+                "backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)
+            ),
+            patch_max_dollars(200.0),
+        ):
+            signal = await strategy.evaluate(game, market, NBA_CONFIG)
+        assert signal.should_trade
+        assert signal.side == "yes"
+        assert signal.price == 88
+
+    async def test_fallback_when_ticker_unparseable(self):
+        # Ticker last segment is a date — outcome_team_from_ticker returns None → fallback
+        # Home (LAL) is leading, so fallback still buys YES
+        game = make_game(home_score=110, away_score=90)
+        market = make_market(yes_ask=88, ticker="KXNBA-LAL-20260317")
+        with (
+            patch(
+                "backend.strategy.late_game.get_config_override", new=AsyncMock(return_value=None)
+            ),
+            patch_max_dollars(200.0),
+        ):
+            signal = await strategy.evaluate(game, market, NBA_CONFIG)
+        assert signal.should_trade
+        assert signal.side == "yes"
 
     async def test_contracts_sized_to_max_dollars(self):
         # max $200, price 88¢ → floor(200*100/88) = 227 contracts
